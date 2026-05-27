@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+{% block titulo %}Produção{% endblock %}
+{% block topbar_titulo %}Fila de Produção{% endblock %}
+
+{% block conteudo %}
+{% set cols = [
+  ('aguardando', 'Aguardando'),
+  ('producao', 'Em Produção'),
+  ('pronto', 'Pronto'),
+  ('entregue', 'Entregue'),
+] %}
+
+<div class="kanban">
+  {% for status_key, status_label in cols %}
+  {% set itens = fila | selectattr('status_producao', 'equalto', status_key) | list %}
+  <div class="kanban-col">
+    <div class="kanban-col-header {{ status_key }}">
+      <span>{{ status_label }}</span>
+      <span class="kanban-col-count" id="count-{{ status_key }}">{{ itens|length }}</span>
+    </div>
+    <div class="kanban-items kanban-drop-zone" id="col-{{ status_key }}" data-status="{{ status_key }}">
+      {% for p in itens %}
+      <div class="kanban-card"
+           draggable="true"
+           data-id="{{ p.id }}"
+           data-status="{{ p.status_producao }}"
+           data-cliente="{{ p.cliente_nome or 'S/ cliente' }}"
+           data-prazo="{{ p.prazo or '' }}"
+           data-obs="{{ p.observacoes or '' }}"
+           data-total="{{ p.total }}">
+        <div class="kanban-card-id">#{{ p.id }} — {{ p.created_at[:10] }}</div>
+        <div class="kanban-card-cliente">{{ p.cliente_nome or 'Sem cliente' }}</div>
+        <div class="kanban-card-info">
+          R$ {{ "%.2f"|format(p.total) }}
+          {% if p.prazo %} · Prazo: {{ p.prazo }}{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% if not itens %}
+      <div class="kanban-vazio" style="text-align:center;padding:20px;color:var(--texto-leve);font-size:.8rem;">Vazio</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-titulo">Pedido #</h3>
+      <button class="btn btn-ghost btn-sm" onclick="fecharModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid form-grid-2 mb-16">
+        <div>
+          <p class="text-muted text-sm mb-8">Cliente</p>
+          <p class="fw-600" id="modal-cliente"></p>
+        </div>
+        <div>
+          <p class="text-muted text-sm mb-8">Total</p>
+          <p class="fw-600" id="modal-total"></p>
+        </div>
+        <div>
+          <p class="text-muted text-sm mb-8">Prazo</p>
+          <p id="modal-prazo"></p>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Status de Produção</label>
+        <select id="modal-status" class="form-control">
+          <option value="aguardando">Aguardando</option>
+          <option value="producao">Em Produção</option>
+          <option value="pronto">Pronto</option>
+          <option value="entregue">Entregue</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secundario" onclick="fecharModal()">Fechar</button>
+      <button class="btn btn-primario" onclick="salvarStatus()">
+        <i data-lucide="save"></i> Salvar
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Modal ─────────────────────────────────────────────────────────── */
+let pedidoAtual = null;
+
+function abrirModal(id, cliente, status, prazo, obs, total) {
+  pedidoAtual = id;
+  document.getElementById('modal-titulo').textContent = 'Pedido #' + id;
+  document.getElementById('modal-cliente').textContent = cliente;
+  document.getElementById('modal-total').textContent = 'R$ ' + parseFloat(total).toFixed(2);
+  document.getElementById('modal-prazo').textContent = prazo || '—';
+  document.getElementById('modal-status').value = status;
+  document.getElementById('modal-overlay').classList.add('aberto');
+  lucide.createIcons();
+}
+
+function fecharModal() {
+  document.getElementById('modal-overlay').classList.remove('aberto');
+  pedidoAtual = null;
+}
+
+function salvarStatus() {
+  const status = document.getElementById('modal-status').value;
+  const card = document.querySelector(`.kanban-card[data-id="${pedidoAtual}"]`);
+  atualizarStatus(pedidoAtual, status, card).then(() => fecharModal());
+}
+
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) fecharModal();
+});
+
+/* ── Atualizar status via API ───────────────────────────────────────── */
+function atualizarStatus(id, novoStatus, card) {
+  return fetch(`/producao/${id}/status`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: novoStatus})
+  }).then(r => {
+    if (!r.ok) throw new Error('Erro ao salvar');
+    if (card) moverCardParaColuna(card, novoStatus);
+  }).catch(() => {
+    mostrarToast('Erro ao mover pedido', 'erro');
+  });
+}
+
+/* ── Mover card no DOM sem reload ───────────────────────────────────── */
+function moverCardParaColuna(card, novoStatus) {
+  const statusAtual = card.dataset.status;
+  const colDestino = document.getElementById('col-' + novoStatus);
+  if (!colDestino) return;
+
+  card.dataset.status = novoStatus;
+
+  // Remove "Vazio" da coluna destino se existir
+  const vazio = colDestino.querySelector('.kanban-vazio');
+  if (vazio) vazio.remove();
+
+  // Adiciona o card na coluna destino
+  colDestino.appendChild(card);
+
+  // Verifica se coluna de origem ficou vazia
+  const colOrigem = document.getElementById('col-' + statusAtual);
+  if (colOrigem && colOrigem.querySelectorAll('.kanban-card').length === 0) {
+    const div = document.createElement('div');
+    div.className = 'kanban-vazio';
+    div.style.cssText = 'text-align:center;padding:20px;color:var(--texto-leve);font-size:.8rem;';
+    div.textContent = 'Vazio';
+    colOrigem.appendChild(div);
+  }
+
+  // Atualiza contadores
+  atualizarContadores();
+}
+
+function atualizarContadores() {
+  ['aguardando','producao','pronto','entregue'].forEach(s => {
+    const col = document.getElementById('col-' + s);
+    const count = col ? col.querySelectorAll('.kanban-card').length : 0;
+    const el = document.getElementById('count-' + s);
+    if (el) el.textContent = count;
+  });
+}
+
+/* ── Drag & Drop ────────────────────────────────────────────────────── */
+let cardArrastando = null;
+
+document.addEventListener('dragstart', function(e) {
+  const card = e.target.closest('.kanban-card');
+  if (!card) return;
+  cardArrastando = card;
+  card.classList.add('arrastando');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', card.dataset.id);
+});
+
+document.addEventListener('dragend', function(e) {
+  const card = e.target.closest('.kanban-card');
+  if (card) card.classList.remove('arrastando');
+  document.querySelectorAll('.kanban-drop-zone').forEach(z => z.classList.remove('drag-over'));
+  cardArrastando = null;
+});
+
+document.querySelectorAll('.kanban-drop-zone').forEach(zona => {
+  zona.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (cardArrastando && cardArrastando.dataset.status !== this.dataset.status) {
+      this.classList.add('drag-over');
+    }
+  });
+
+  zona.addEventListener('dragleave', function(e) {
+    if (!this.contains(e.relatedTarget)) {
+      this.classList.remove('drag-over');
+    }
+  });
+
+  zona.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    if (!cardArrastando) return;
+    const novoStatus = this.dataset.status;
+    if (cardArrastando.dataset.status === novoStatus) return;
+    atualizarStatus(cardArrastando.dataset.id, novoStatus, cardArrastando);
+  });
+});
+
+/* ── Click para abrir modal ─────────────────────────────────────────── */
+document.querySelectorAll('.kanban-card').forEach(card => {
+  card.addEventListener('click', function(e) {
+    if (this.classList.contains('arrastando')) return;
+    abrirModal(
+      this.dataset.id,
+      this.dataset.cliente,
+      this.dataset.status,
+      this.dataset.prazo,
+      this.dataset.obs,
+      this.dataset.total
+    );
+  });
+});
+
+/* ── Toast de feedback ──────────────────────────────────────────────── */
+function mostrarToast(msg, tipo) {
+  const t = document.createElement('div');
+  t.className = 'kanban-toast ' + (tipo || '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('visivel'), 10);
+  setTimeout(() => { t.classList.remove('visivel'); setTimeout(() => t.remove(), 300); }, 2500);
+}
+</script>
+{% endblock %}

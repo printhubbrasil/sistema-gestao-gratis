@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block titulo %}Produtos{% endblock %}
+{% block topbar_titulo %}Produtos{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('novo_produto') }}" class="btn btn-primario">
+    <i data-lucide="plus"></i> Novo Produto
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="filtros">
+  <form method="get" class="busca-wrapper">
+    <i data-lucide="search"></i>
+    <input type="text" name="q" class="form-control" placeholder="Buscar produto..." value="{{ busca or '' }}" oninput="this.form.submit()">
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    {% if produtos %}
+    <table>
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th>Categoria</th>
+          <th>Preço</th>
+          <th>Unidade</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in produtos %}
+        <tr>
+          <td>
+            <div class="fw-600">{{ p.nome }}</div>
+            {% if p.descricao %}<div class="text-muted text-sm">{{ p.descricao[:60] }}{% if p.descricao|length > 60 %}...{% endif %}</div>{% endif %}
+          </td>
+          <td class="text-muted">{{ p.categoria_nome or '—' }}</td>
+          <td class="fw-600">R$ {{ "%.2f"|format(p.preco) }}</td>
+          <td class="text-muted">{{ p.unidade }}</td>
+          <td>
+            {% if p.ativo %}
+            <span class="badge badge-pronto">Ativo</span>
+            {% else %}
+            <span class="badge badge-cancelado">Inativo</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="d-flex gap-8">
+              <a href="{{ url_for('editar_produto', id=p.id) }}" class="btn btn-ghost btn-sm">
+                <i data-lucide="pencil"></i>
+              </a>
+              <form method="post" action="{{ url_for('excluir_produto', id=p.id) }}" onsubmit="return confirm('Excluir {{ p.nome }}?')">
+                <button type="submit" class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="package"></i>
+      <p>Nenhum produto cadastrado. <a href="{{ url_for('novo_produto') }}" style="color:var(--primaria)">Cadastrar o primeiro</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

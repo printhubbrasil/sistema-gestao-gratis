@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% block titulo %}Usuários{% endblock %}
+{% block topbar_titulo %}Gerenciar Usuários{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('admin_backup_download') }}" class="btn btn-secundario btn-sm" style="margin-right:8px;">⬇ Baixar Backup</a>
+  <a href="{{ url_for('admin_novo_usuario') }}" class="btn btn-primario btn-sm">+ Novo Usuário</a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="card">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Login</th>
+          <th>Nível</th>
+          <th>Status</th>
+          <th>Criado em</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usuarios %}
+        <tr>
+          <td>{{ u.nome }}</td>
+          <td><code style="font-size:.85rem;background:#f1f5f9;padding:2px 7px;border-radius:4px;">{{ u.login }}</code></td>
+          <td>
+            <span class="badge {{ 'badge-admin' if u.nivel == 'admin' else 'badge-op' }}">
+              {{ u.nivel }}
+            </span>
+          </td>
+          <td>
+            {% if u.ativo %}
+              <span class="badge badge-sucesso">Ativo</span>
+            {% else %}
+              <span class="badge badge-cancelado">Inativo</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--texto-leve);">{{ u.created_at[:10] }}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            <a href="{{ url_for('admin_editar_usuario', id=u.id) }}" class="btn btn-sm btn-outline">Editar</a>
+            {% if u.id != session.usuario_id %}
+              <button class="btn btn-sm {{ 'btn-outline-perigo' if u.ativo else 'btn-outline' }}"
+                      onclick="toggleUsuario({{ u.id }}, {{ 0 if u.ativo else 1 }})">
+                {{ 'Desativar' if u.ativo else 'Ativar' }}
+              </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function toggleUsuario(id, ativo) {
+  if (!confirm(ativo ? 'Ativar este usuário?' : 'Desativar este usuário?')) return;
+  fetch('/admin/usuarios/' + id + '/toggle', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ativo: ativo})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+  });
+}
+</script>
+{% endblock %}

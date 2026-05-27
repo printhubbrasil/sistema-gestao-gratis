@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block titulo %}Emitir Nota Fiscal{% endblock %}
+{% block topbar_titulo %}Emitir Nota Fiscal{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('notasfiscais') }}" class="btn btn-secundario">
+    <i data-lucide="arrow-left"></i> Voltar
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div style="max-width:680px;">
+  <form method="post" id="form-nf">
+    <div class="card mb-16">
+      <div class="card-header"><h3>Vincular a Pedido (opcional)</h3></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>Pedido</label>
+          <select name="pedido_id" class="form-control" id="select-pedido" onchange="preencherPedido(this)">
+            <option value="">— Sem pedido vinculado —</option>
+            {% for p in pedidos %}
+            <option value="{{ p.id }}" data-cliente-id="{{ p.cliente_id or '' }}" data-cliente="{{ p.cliente_nome or '' }}" data-total="{{ p.total }}">
+              #{{ p.id }} — {{ p.cliente_nome or 'Sem cliente' }} — R$ {{ "%.2f"|format(p.total) }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-16">
+      <div class="card-header"><h3>Dados do Cliente / Tomador</h3></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>Selecionar cliente cadastrado</label>
+          <select name="cliente_id" class="form-control" id="select-cliente" onchange="preencherCliente(this)">
+            <option value="">— Buscar na lista —</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}" data-nome="{{ c.nome }}" data-doc="{{ c.cpf_cnpj or '' }}">{{ c.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Nome do Tomador *</label>
+            <input type="text" name="cliente_nome" id="input-nome" class="form-control" required placeholder="Nome completo ou razão social">
+          </div>
+          <div class="form-group">
+            <label>CPF / CNPJ</label>
+            <input type="text" name="cliente_cpf_cnpj" id="input-doc" class="form-control" placeholder="000.000.000-00">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-16">
+      <div class="card-header"><h3>Dados da Nota</h3></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>Descrição do Serviço *</label>
+          <textarea name="descricao_servico" class="form-control" rows="3" required placeholder="Ex: Impressão gráfica de 500 cartões de visita frente e verso, acabamento fosco..."></textarea>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Valor Total (R$) *</label>
+            <input type="number" name="valor_total" id="input-valor" class="form-control" min="0.01" step="0.01" required placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label>Observações</label>
+            <input type="text" name="observacoes" class="form-control" placeholder="Informações adicionais...">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-between align-center">
+      <a href="{{ url_for('notasfiscais') }}" class="btn btn-secundario">Cancelar</a>
+      <button type="submit" class="btn btn-primario btn-lg">
+        <i data-lucide="file-text"></i> Emitir Nota Fiscal
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function preencherPedido(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt.value) return;
+  const clienteId = opt.dataset.clienteId;
+  const nome = opt.dataset.cliente;
+  const total = opt.dataset.total;
+  if (nome) document.getElementById('input-nome').value = nome;
+  if (total) document.getElementById('input-valor').value = parseFloat(total).toFixed(2);
+  if (clienteId) {
+    const cs = document.getElementById('select-cliente');
+    for (let o of cs.options) {
+      if (o.value == clienteId) {
+        cs.value = clienteId;
+        document.getElementById('input-doc').value = o.dataset.doc || '';
+        break;
+      }
+    }
+  }
+}
+
+function preencherCliente(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt.value) return;
+  document.getElementById('input-nome').value = opt.dataset.nome || '';
+  document.getElementById('input-doc').value = opt.dataset.doc || '';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block titulo %}Fornecedores{% endblock %}
+{% block topbar_titulo %}Fornecedores{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('novo_fornecedor') }}" class="btn btn-primario">
+    <i data-lucide="plus"></i> Novo Fornecedor
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="filtros">
+  <form method="get" class="busca-wrapper">
+    <i data-lucide="search"></i>
+    <input type="text" name="q" class="form-control" placeholder="Buscar por nome ou produto/serviço..." value="{{ busca or '' }}" oninput="this.form.submit()">
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    {% if fornecedores %}
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Contato</th>
+          <th>Telefone</th>
+          <th>Email</th>
+          <th>CNPJ</th>
+          <th>Produto / Serviço</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in fornecedores %}
+        <tr>
+          <td class="fw-600">{{ f.nome }}</td>
+          <td>{{ f.contato or '—' }}</td>
+          <td>{{ f.telefone or '—' }}</td>
+          <td class="text-muted">{{ f.email or '—' }}</td>
+          <td class="text-muted">{{ f.cnpj or '—' }}</td>
+          <td class="text-muted">{{ f.produto_servico or '—' }}</td>
+          <td>
+            <div class="d-flex gap-8">
+              <a href="{{ url_for('editar_fornecedor', id=f.id) }}" class="btn btn-ghost btn-sm">
+                <i data-lucide="pencil"></i>
+              </a>
+              <form method="post" action="{{ url_for('excluir_fornecedor', id=f.id) }}" onsubmit="return confirm('Excluir {{ f.nome }}?')">
+                <button type="submit" class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="truck"></i>
+      <p>Nenhum fornecedor cadastrado. <a href="{{ url_for('novo_fornecedor') }}" style="color:var(--primaria)">Cadastrar o primeiro</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

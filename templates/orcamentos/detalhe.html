@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block titulo %}Orçamento {{ orcamento.numero }}{% endblock %}
+{% block topbar_titulo %}{{ orcamento.numero }}{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('imprimir_orcamento', id=orcamento.id) }}" target="_blank" class="btn btn-secundario">
+    <i data-lucide="printer"></i> Imprimir / PDF
+  </a>
+  {% if orcamento.status not in ['aprovado','cancelado'] %}
+  <form method="post" action="{{ url_for('converter_orcamento', id=orcamento.id) }}" style="display:inline" onsubmit="return confirm('Converter em pedido?')">
+    <button type="submit" class="btn btn-primario">
+      <i data-lucide="check-circle"></i> Converter em Pedido
+    </button>
+  </form>
+  {% endif %}
+  <a href="{{ url_for('editar_orcamento', id=orcamento.id) }}" class="btn btn-secundario">
+    <i data-lucide="pencil"></i> Editar
+  </a>
+  <a href="{{ url_for('orcamentos') }}" class="btn btn-secundario">
+    <i data-lucide="arrow-left"></i> Voltar
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;">
+  <div>
+    <div class="card mb-16">
+      <div class="card-header"><h3>Informações do Orçamento</h3></div>
+      <div class="card-body">
+        <div class="form-grid form-grid-2">
+          <div>
+            <p class="text-muted text-sm mb-8">Cliente</p>
+            <p class="fw-600">{{ orcamento.cliente_nome or '—' }}</p>
+            {% if orcamento.cliente_email %}<p class="text-muted text-sm">{{ orcamento.cliente_email }}</p>{% endif %}
+            {% if orcamento.cliente_telefone %}<p class="text-muted text-sm">{{ orcamento.cliente_telefone }}</p>{% endif %}
+          </div>
+          <div>
+            <p class="text-muted text-sm mb-8">Criado em</p>
+            <p>{{ orcamento.created_at[:10] }}</p>
+          </div>
+          <div>
+            <p class="text-muted text-sm mb-8">Validade</p>
+            <p>{{ orcamento.validade or '—' }}</p>
+          </div>
+          <div>
+            <p class="text-muted text-sm mb-8">Pagamento</p>
+            <p>{{ orcamento.forma_pagamento or '—' }}</p>
+          </div>
+        </div>
+        {% if orcamento.condicoes %}
+        <div class="mt-16" style="padding-top:16px;border-top:1px solid var(--borda);">
+          <p class="text-muted text-sm mb-8">Condições de Pagamento</p>
+          <p>{{ orcamento.condicoes }}</p>
+        </div>
+        {% endif %}
+        {% if orcamento.observacoes %}
+        <div class="mt-16" style="padding-top:16px;border-top:1px solid var(--borda);">
+          <p class="text-muted text-sm mb-8">Observações</p>
+          <p>{{ orcamento.observacoes }}</p>
+        </div>
+        {% endif %}
+        {% if orcamento.pedido_id %}
+        <div class="mt-16" style="padding-top:16px;border-top:1px solid var(--borda);">
+          <p class="text-muted text-sm mb-8">Pedido gerado</p>
+          <a href="{{ url_for('ver_pedido', id=orcamento.pedido_id) }}" class="btn btn-secundario btn-sm">
+            <i data-lucide="shopping-bag"></i> Pedido #{{ orcamento.pedido_id }}
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Itens</h3></div>
+      <div class="table-container">
+        {% if orcamento.itens %}
+        <table>
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th class="text-right">Qtd</th>
+              <th class="text-right">Preço Unit.</th>
+              <th class="text-right">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for i in orcamento.itens %}
+            <tr>
+              <td>{{ i.descricao or i.produto_nome or '—' }}</td>
+              <td class="text-right">{{ i.quantidade }}</td>
+              <td class="text-right">R$ {{ "%.2f"|format(i.preco_unitario) }}</td>
+              <td class="text-right fw-600">R$ {{ "%.2f"|format(i.subtotal) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="vazio"><p>Sem itens registrados.</p></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Resumo</h3></div>
+    <div class="card-body">
+      <div class="d-flex justify-between mb-8">
+        <span class="text-muted">Subtotal</span>
+        <span>R$ {{ "%.2f"|format(orcamento.total + orcamento.desconto) }}</span>
+      </div>
+      {% if orcamento.desconto > 0 %}
+      <div class="d-flex justify-between mb-8">
+        <span class="text-muted">Desconto</span>
+        <span class="text-perigo">-R$ {{ "%.2f"|format(orcamento.desconto) }}</span>
+      </div>
+      {% endif %}
+      <div class="d-flex justify-between" style="padding-top:12px;border-top:1px solid var(--borda);">
+        <span class="fw-700">Total</span>
+        <span class="fw-700 text-primaria" style="font-size:1.1rem;">R$ {{ "%.2f"|format(orcamento.total) }}</span>
+      </div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--borda);">
+        <p class="text-muted text-sm mb-8">Status</p>
+        <span class="badge badge-orc-{{ orcamento.status }}">{{ orcamento.status|title }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

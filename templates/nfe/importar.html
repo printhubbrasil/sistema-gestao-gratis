@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+{% block titulo %}Importar NF-e{% endblock %}
+{% block topbar_titulo %}Importar NF-e (Fornecedor){% endblock %}
+
+{% block topbar_acoes %}
+{% if not nfe %}
+<label for="upload-trigger" class="btn btn-primario btn-sm" style="cursor:pointer">
+  <i data-lucide="upload"></i> Carregar XML
+</label>
+{% endif %}
+{% endblock %}
+
+{% block conteudo %}
+
+{% if not nfe %}
+<!-- ── FASE 1: UPLOAD ─────────────────────────────────────────────────────── -->
+<div class="card" style="max-width:520px">
+  <div class="card-header"><h3>Carregar XML de NF-e</h3></div>
+  <div style="padding:1.5rem">
+    <form method="POST" action="{{ url_for('nfe_upload') }}" enctype="multipart/form-data" id="form-upload">
+      <div class="upload-area" id="upload-area" onclick="document.getElementById('upload-trigger').click()">
+        <i data-lucide="file-up" style="width:40px;height:40px;color:var(--primaria);opacity:.7;margin-bottom:12px"></i>
+        <p style="font-weight:600;margin:0 0 4px">Arraste o arquivo XML aqui</p>
+        <p style="font-size:.8rem;color:var(--texto-leve);margin:0">ou clique para selecionar</p>
+        <p id="upload-nome" style="margin-top:10px;font-size:.85rem;color:var(--primaria);display:none"></p>
+      </div>
+      <input type="file" name="xml_file" id="upload-trigger" accept=".xml" style="display:none"
+             onchange="onArquivoSelecionado(this)">
+      <button type="submit" class="btn btn-primario w-full" id="btn-processar" style="margin-top:1rem" disabled>
+        <i data-lucide="cpu"></i> Processar NF-e
+      </button>
+    </form>
+    <p style="font-size:.75rem;color:var(--texto-leve);margin-top:.75rem;text-align:center">
+      Suporta NF-e padrão SEFAZ (namespace portalfiscal.inf.br/nfe)
+    </p>
+  </div>
+</div>
+
+{% else %}
+<!-- ── FASE 2: REVISÃO / VÍNCULO ─────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px">
+    <div>
+      <h3 style="margin-bottom:2px">NF-e #{{ nfe.numero_nf }} — {{ nfe.data_emissao }}</h3>
+      <p style="margin:0;font-size:.85rem;color:var(--texto-leve)">
+        {{ nfe.nome }}
+        {% if nfe.cnpj %}<span style="opacity:.6"> · CNPJ {{ nfe.cnpj[:2] }}.{{ nfe.cnpj[2:5] }}.{{ nfe.cnpj[5:8] }}/{{ nfe.cnpj[8:12] }}-{{ nfe.cnpj[12:] }}</span>{% endif %}
+      </p>
+    </div>
+    <span style="font-size:1.25rem;font-weight:700;color:var(--primaria)">
+      R$ {{ "%.2f"|format(nfe.valor_total) }}
+    </span>
+  </div>
+
+  <div style="padding:.75rem 1.25rem;background:#f8fafc;border-bottom:1px solid var(--borda);font-size:.8rem;color:#64748b">
+    <i data-lucide="info" style="width:13px;height:13px;vertical-align:-2px"></i>
+    Para cada item: <strong>Vincular</strong> a um insumo existente, <strong>Criar novo</strong> insumo ou <strong>Ignorar</strong>.
+    Itens já mapeados em notas anteriores aparecem pré-selecionados.
+  </div>
+
+  <form method="POST" action="{{ url_for('nfe_confirmar') }}">
+    <input type="hidden" name="cnpj"           value="{{ nfe.cnpj }}">
+    <input type="hidden" name="nome_emitente"  value="{{ nfe.nome }}">
+    <input type="hidden" name="numero_nf"      value="{{ nfe.numero_nf }}">
+    <input type="hidden" name="data_emissao"   value="{{ nfe.data_emissao }}">
+    <input type="hidden" name="valor_total"    value="{{ nfe.valor_total }}">
+    <input type="hidden" name="n_itens"        value="{{ nfe.itens|length }}">
+
+    <div class="table-container">
+    <table class="nfe-tabela">
+      <thead>
+        <tr>
+          <th style="width:90px">Código</th>
+          <th>Descrição (NF-e)</th>
+          <th style="width:70px;text-align:right">Qtd</th>
+          <th style="width:50px">Un.</th>
+          <th style="width:100px;text-align:right">Vl. Unit.</th>
+          <th style="width:110px;text-align:center">Ação</th>
+          <th style="width:130px">Tipo de Insumo</th>
+          <th>Insumo no Sistema</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in nfe.itens %}
+        {% set i = loop.index0 %}
+        {% set m = item.mapeamento %}
+        <tr id="row-{{ i }}" class="nfe-row">
+          <td>
+            <code style="font-size:.78rem">{{ item.codigo }}</code>
+            <input type="hidden" name="codigo_{{ i }}"    value="{{ item.codigo }}">
+            <input type="hidden" name="descricao_{{ i }}" value="{{ item.descricao }}">
+            <input type="hidden" name="quantidade_{{ i }}" value="{{ item.quantidade }}">
+            <input type="hidden" name="unidade_{{ i }}"   value="{{ item.unidade }}">
+            <input type="hidden" name="valor_unit_{{ i }}" value="{{ item.valor_unit }}">
+          </td>
+          <td style="font-size:.85rem">{{ item.descricao }}</td>
+          <td style="text-align:right;font-weight:600">{{ item.quantidade }}</td>
+          <td style="color:var(--texto-leve);font-size:.8rem">{{ item.unidade }}</td>
+          <td style="text-align:right;font-weight:600">R$ {{ "%.2f"|format(item.valor_unit) }}</td>
+
+          <!-- AÇÃO -->
+          <td style="text-align:center">
+            <input type="hidden" name="acao_{{ i }}" id="acao_{{ i }}"
+                   value="{{ 'vincular' if m else 'vincular' }}">
+            <div class="nfe-acao-btns">
+              <button type="button" class="nfe-acao-btn {% if m or True %}ativo{% endif %}"
+                      data-acao="vincular" data-row="{{ i }}"
+                      onclick="setAcao({{ i }}, 'vincular', this)">Vincular</button>
+              <button type="button" class="nfe-acao-btn"
+                      data-acao="criar_novo" data-row="{{ i }}"
+                      onclick="setAcao({{ i }}, 'criar_novo', this)">Criar novo</button>
+              <button type="button" class="nfe-acao-btn"
+                      data-acao="ignorar" data-row="{{ i }}"
+                      onclick="setAcao({{ i }}, 'ignorar', this)">Ignorar</button>
+            </div>
+          </td>
+
+          <!-- TIPO -->
+          <td>
+            <select name="tipo_{{ i }}" id="tipo_{{ i }}"
+                    onchange="updateInsumoSelect({{ i }})"
+                    class="input nfe-select-sm">
+              <option value="">— Tipo —</option>
+              <option value="papel"      {% if m and m.insumo_tipo=='papel'      %}selected{% endif %}>Papel</option>
+              <option value="acabamento" {% if m and m.insumo_tipo=='acabamento' %}selected{% endif %}>Acabamento</option>
+              <option value="papelao"    {% if m and m.insumo_tipo=='papelao'    %}selected{% endif %}>Papelão</option>
+              <option value="midia"      {% if m and m.insumo_tipo=='midia'      %}selected{% endif %}>Mídia / Bobina</option>
+            </select>
+          </td>
+
+          <!-- INSUMO -->
+          <td id="td-ins-{{ i }}">
+            <div id="div-vincular-{{ i }}">
+              <select name="insumo_id_{{ i }}" id="insumo_id_{{ i }}"
+                      class="input nfe-select-sm"
+                      data-pre="{{ m.insumo_id if m else '' }}">
+                <option value="">— Selecione —</option>
+              </select>
+            </div>
+            <div id="div-criar-{{ i }}" style="display:none">
+              <input type="text" name="novo_nome_{{ i }}" id="novo_nome_{{ i }}"
+                     value="{{ item.descricao }}"
+                     class="input nfe-select-sm"
+                     placeholder="Nome do novo insumo">
+            </div>
+            <div id="div-ignorar-{{ i }}" style="display:none">
+              <span style="font-size:.8rem;color:var(--texto-leve)">— não importado —</span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <div style="padding:1.25rem;display:flex;gap:12px;justify-content:flex-end;border-top:1px solid var(--borda)">
+      <a href="{{ url_for('nfe_importar') }}" class="btn btn-ghost">Cancelar</a>
+      <button type="submit" class="btn btn-primario">
+        <i data-lucide="check-circle"></i> Confirmar Importação
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<!-- ── HISTÓRICO ──────────────────────────────────────────────────────────── -->
+{% if historico %}
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header">
+    <h3>Histórico de Importações</h3>
+    <span style="font-size:.8rem;color:var(--texto-leve)">{{ historico|length }} nota(s)</span>
+  </div>
+  <div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Fornecedor</th>
+        <th>NF</th>
+        <th>Data NF</th>
+        <th style="text-align:center">Itens</th>
+        <th style="text-align:right">Valor Total</th>
+        <th>Importado em</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in historico %}
+      <tr>
+        <td class="text-muted" style="font-size:.8rem">{{ h.id }}</td>
+        <td style="font-size:.85rem">{{ h.nome_emitente or '—' }}</td>
+        <td><code style="font-size:.8rem">{{ h.numero_nf }}</code></td>
+        <td style="color:var(--texto-leve);font-size:.82rem">{{ h.data_emissao }}</td>
+        <td style="text-align:center">
+          <span class="badge badge-info">{{ h.n_itens }}</span>
+        </td>
+        <td style="text-align:right;font-weight:600">R$ {{ "%.2f"|format(h.valor_total) }}</td>
+        <td style="color:var(--texto-leve);font-size:.8rem">{{ h.created_at[:16] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const INSUMOS = {{ insumos | tojson if insumos else '{}' }};
+
+/* ── Upload drag & drop ── */
+function onArquivoSelecionado(input) {
+  const nome = input.files[0]?.name;
+  if (nome) {
+    document.getElementById('upload-nome').textContent = nome;
+    document.getElementById('upload-nome').style.display = '';
+    document.getElementById('btn-processar').disabled = false;
+    document.getElementById('upload-area').style.borderColor = 'var(--primaria)';
+  }
+}
+
+const area = document.getElementById('upload-area');
+if (area) {
+  area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('drag-over'); });
+  area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    area.classList.remove('drag-over');
+    const dt = new DataTransfer();
+    dt.items.add(e.dataTransfer.files[0]);
+    const inp = document.getElementById('upload-trigger');
+    inp.files = dt.files;
+    onArquivoSelecionado(inp);
+  });
+}
+
+/* ── Ação (vincular / criar_novo / ignorar) ── */
+function setAcao(i, acao, btn) {
+  document.getElementById(`acao_${i}`).value = acao;
+  document.querySelectorAll(`#row-${i} .nfe-acao-btn`).forEach(b => b.classList.remove('ativo'));
+  btn.classList.add('ativo');
+
+  document.getElementById(`div-vincular-${i}`).style.display = acao === 'vincular'   ? '' : 'none';
+  document.getElementById(`div-criar-${i}`).style.display    = acao === 'criar_novo' ? '' : 'none';
+  document.getElementById(`div-ignorar-${i}`).style.display  = acao === 'ignorar'    ? '' : 'none';
+
+  const tipoSel = document.getElementById(`tipo_${i}`);
+  if (tipoSel) tipoSel.disabled = acao === 'ignorar';
+}
+
+/* ── Atualiza select de insumo conforme tipo ── */
+function updateInsumoSelect(i) {
+  const tipo = document.getElementById(`tipo_${i}`)?.value;
+  const sel  = document.getElementById(`insumo_id_${i}`);
+  if (!sel) return;
+  const preSelected = sel.dataset.pre;
+  sel.innerHTML = '<option value="">— Selecione —</option>';
+  (INSUMOS[tipo] || []).forEach(ins => {
+    const opt = document.createElement('option');
+    opt.value = ins.id;
+    opt.textContent = ins.nome;
+    if (String(ins.id) === String(preSelected)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+/* ── Inicializa dropdowns para itens já mapeados ── */
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[id^="tipo_"]').forEach(sel => {
+    const i = sel.id.split('_')[1];
+    if (sel.value) updateInsumoSelect(parseInt(i));
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,338 @@
+{% extends 'base.html' %}
+{% block titulo %}Ponto de Equilíbrio{% endblock %}
+{% block topbar_titulo %}Ponto de Equilíbrio{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('prec_calcular') }}" class="btn btn-secundario">
+    <i data-lucide="calculator"></i> Calculadora
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<style>
+  .pec-layout { display:grid; grid-template-columns:1fr 340px; gap:20px; align-items:start; }
+  .pec-cat-titulo {
+    font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.6px;
+    color:var(--texto-muted); padding:10px 0 6px; border-bottom:1px solid var(--borda);
+    margin-bottom:6px;
+  }
+  .pec-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:8px; margin-bottom:4px; border:1px solid var(--borda); background:var(--card-bg); transition:border-color .15s; }
+  .pec-item:hover { border-color:var(--primaria); }
+  .pec-item-nome { flex:1; font-weight:600; font-size:.88rem; }
+  .pec-item-obs  { font-size:.74rem; color:var(--texto-muted); }
+  .pec-item-valor { font-family:monospace; font-weight:700; font-size:.95rem; color:var(--primaria); min-width:110px; text-align:right; }
+  .pec-item-acoes { display:flex; gap:4px; }
+
+  .pec-resumo-box { padding:20px; border-radius:12px; text-align:center; border:1px solid var(--borda); margin-bottom:16px; }
+  .pec-resumo-box .val { font-size:1.9rem; font-weight:800; }
+  .pec-resumo-box .lbl { font-size:.75rem; color:var(--texto-muted); margin-top:4px; }
+
+  .pec-analise { background:rgba(233,69,96,.06); border:1px solid rgba(233,69,96,.25); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .pec-analise-linha { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid rgba(233,69,96,.12); font-size:.85rem; }
+  .pec-analise-linha:last-child { border-bottom:none; }
+  .pec-analise-linha strong { font-family:monospace; }
+
+  .markup-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .markup-row label { font-size:.82rem; color:var(--texto-muted); white-space:nowrap; }
+  .markup-row input[type=range] { flex:1; accent-color:var(--primaria); }
+  .markup-row .val { font-weight:700; color:var(--primaria); min-width:40px; text-align:right; font-size:.9rem; }
+
+  .cat-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+  .bar-cat { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:.82rem; }
+  .bar-cat-fill { height:10px; border-radius:5px; transition:width .3s; }
+  .bar-cat-val { min-width:80px; text-align:right; font-weight:600; font-family:monospace; font-size:.8rem; }
+</style>
+
+<div class="pec-layout">
+  <!-- COLUNA PRINCIPAL: lista de custos -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <h3>Custos Fixos Mensais</h3>
+        <button class="btn btn-primario btn-sm" onclick="abrirFormNovo()">
+          <i data-lucide="plus"></i> Adicionar custo
+        </button>
+      </div>
+      <div class="card-body">
+
+        {% if not custos %}
+        <div class="vazio" style="padding:40px 0;">
+          <i data-lucide="scale"></i>
+          <p>Nenhum custo fixo cadastrado ainda.</p>
+          <button class="btn btn-primario" onclick="abrirFormNovo()">
+            <i data-lucide="plus"></i> Adicionar o primeiro custo
+          </button>
+        </div>
+        {% else %}
+
+        {% set cats = {
+          'pessoal':     ('👤 Pessoal', '#3B82F6'),
+          'instalacoes': ('🏢 Instalações', '#8B5CF6'),
+          'utilidades':  ('⚡ Utilidades', '#F59E0B'),
+          'servicos':    ('🔧 Serviços Externos', '#10B981'),
+          'financeiro':  ('💳 Financeiro', '#EF4444'),
+          'marketing':   ('📣 Marketing', '#EC4899'),
+          'outros':      ('📋 Outros', '#6B7280'),
+        } %}
+        {% for cat_id, (cat_label, cat_cor) in cats.items() %}
+          {% set itens = custos | selectattr('categoria', 'equalto', cat_id) | list %}
+          {% if itens %}
+          <div class="pec-cat-titulo">
+            <span class="cat-dot" style="background:{{ cat_cor }}"></span>{{ cat_label }}
+            <span style="float:right;font-size:.8rem;color:var(--texto);">
+              R$ {{ "%.2f"|format(itens|sum(attribute='valor')) }}
+            </span>
+          </div>
+          {% for c in itens %}
+          <div class="pec-item">
+            <div style="flex:1;">
+              <div class="pec-item-nome">{{ c.nome }}</div>
+              {% if c.observacao %}<div class="pec-item-obs">{{ c.observacao }}</div>{% endif %}
+            </div>
+            <div class="pec-item-valor">R$ {{ "%.2f"|format(c.valor) }}</div>
+            <div class="pec-item-acoes">
+              <button class="btn btn-ghost btn-sm" onclick="editarCusto({{ c|tojson }})">
+                <i data-lucide="pencil"></i>
+              </button>
+              <form method="POST" action="{{ url_for('pec_excluir_custo', id=c.id) }}" style="display:inline;"
+                onsubmit="return confirm('Excluir {{ c.nome }}?')">
+                <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--erro);">
+                  <i data-lucide="trash-2"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+          <div style="margin-bottom:16px;"></div>
+          {% endif %}
+        {% endfor %}
+
+        <!-- Total geral -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 12px;background:rgba(233,69,96,.06);border:1.5px solid var(--primaria);border-radius:10px;margin-top:8px;">
+          <span style="font-weight:700;font-size:1rem;">Total Mensal</span>
+          <span style="font-size:1.3rem;font-weight:800;color:var(--primaria);font-family:monospace;">R$ {{ "%.2f"|format(total) }}</span>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <!-- FORM: novo / editar custo -->
+    <div class="card" id="form-custo" style="display:none;">
+      <div class="card-header">
+        <h3 id="form-titulo">Novo Custo Fixo</h3>
+      </div>
+      <div class="card-body">
+        <form method="POST" id="action-form-custo" action="{{ url_for('pec_novo_custo') }}">
+          <input type="hidden" id="custo_id_hidden" name="custo_id">
+          <div class="form-grid form-grid-2 mb-16">
+            <div class="form-group">
+              <label>Nome do custo *</label>
+              <input type="text" name="nome" id="custo_nome" class="form-control" required placeholder="Ex: Aluguel gráfica">
+            </div>
+            <div class="form-group">
+              <label>Categoria</label>
+              <select name="categoria" id="custo_cat" class="form-control">
+                <option value="pessoal">👤 Pessoal</option>
+                <option value="instalacoes">🏢 Instalações</option>
+                <option value="utilidades">⚡ Utilidades</option>
+                <option value="servicos">🔧 Serviços Externos</option>
+                <option value="financeiro">💳 Financeiro</option>
+                <option value="marketing">📣 Marketing</option>
+                <option value="outros">📋 Outros</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-grid form-grid-2 mb-16">
+            <div class="form-group">
+              <label>Valor mensal (R$) *</label>
+              <input type="number" name="valor" id="custo_valor" class="form-control" step="0.01" required placeholder="0,00">
+            </div>
+            <div class="form-group">
+              <label>Observação <small class="text-muted">(opcional)</small></label>
+              <input type="text" name="observacao" id="custo_obs" class="form-control" placeholder="Ex: Vence dia 5">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button type="submit" class="btn btn-primario">
+              <i data-lucide="save"></i> Salvar
+            </button>
+            <button type="button" class="btn btn-secundario" onclick="fecharForm()">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLUNA DIREITA: análise -->
+  <div>
+    <!-- Resumo -->
+    <div class="card">
+      <div class="card-body" style="padding:16px;">
+        <div class="pec-resumo-box" style="background:rgba(233,69,96,.06);border-color:var(--primaria);">
+          <div class="val" style="color:var(--primaria);">R$ {{ "%.2f"|format(total) }}</div>
+          <div class="lbl">Custo Fixo Total / Mês</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+          <div class="pec-resumo-box">
+            <div class="val" style="font-size:1.2rem;" id="r_dia">R$ {{ "%.2f"|format(total/30) }}</div>
+            <div class="lbl">por dia (÷30)</div>
+          </div>
+          <div class="pec-resumo-box">
+            <div class="val" style="font-size:1.2rem;" id="r_ano">R$ {{ "%.0f"|format(total*12) }}</div>
+            <div class="lbl">por ano</div>
+          </div>
+        </div>
+
+        <!-- Distribuição por categoria -->
+        <div style="font-size:.75rem;text-transform:uppercase;font-weight:700;letter-spacing:.5px;color:var(--texto-muted);margin-bottom:10px;">Distribuição</div>
+        {% set cats_cores = {
+          'pessoal':'#3B82F6','instalacoes':'#8B5CF6','utilidades':'#F59E0B',
+          'servicos':'#10B981','financeiro':'#EF4444','marketing':'#EC4899','outros':'#6B7280'
+        } %}
+        {% for cat_id, cat_cor in cats_cores.items() %}
+          {% set cat_total = (custos | selectattr('categoria', 'equalto', cat_id) | sum(attribute='valor')) %}
+          {% if cat_total > 0 %}
+          <div class="bar-cat">
+            <span class="cat-dot" style="background:{{ cat_cor }};flex-shrink:0;"></span>
+            <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ categorias[cat_id] }}</span>
+            <div style="flex:2;">
+              <div class="bar-cat-fill" style="background:{{ cat_cor }};width:{{ (cat_total/total*100)|round(0)|int if total > 0 else 0 }}%;min-width:4px;"></div>
+            </div>
+            <span class="bar-cat-val" style="color:{{ cat_cor }};">R$ {{ "%.0f"|format(cat_total) }}</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+        {% if not custos %}
+        <p class="text-muted text-sm">Adicione custos fixos para ver a distribuição.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Análise de ponto de equilíbrio -->
+    {% if total > 0 %}
+    <div class="card">
+      <div class="card-header"><h3>🎯 Análise de Equilíbrio</h3></div>
+      <div class="card-body" style="padding:16px;">
+        <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:12px;">
+          Ajuste o markup médio para ver o faturamento mínimo necessário.
+        </div>
+        <div class="markup-row">
+          <label>Markup médio:</label>
+          <input type="range" id="pec_markup" min="1.2" max="8" step="0.1" value="{{ markup_padrao }}"
+            oninput="calcPec(this.value)">
+          <span class="val" id="pec_markup_val">×{{ "%.1f"|format(markup_padrao) }}</span>
+        </div>
+
+        <div class="pec-analise" id="pec_resultado">
+          <!-- preenchido pelo JS -->
+        </div>
+
+        <div style="font-size:.72rem;color:var(--texto-muted);margin-top:8px;line-height:1.5;">
+          * Faturamento mínimo = Custos Fixos ÷ Margem de Contribuição.<br>
+          MC estimada com base no markup e nos investimentos configurados.
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+// ── Dados da página ──────────────────────────────────────────────────────────
+const PEC_TOTAL = {{ total|float }};
+const PEC_OVERHEAD_PCT = {{ overhead_pct|float }};
+const PEC_INVEST_VENDA_PCT = {{ invest_venda_pct|float }};
+
+// ── Cálculo do ponto de equilíbrio ───────────────────────────────────────────
+// Dado markup M e invest_venda I:
+//   precoVenda = custoProd * M * (1 + I/100)
+//   MC = precoVenda - custoProd - overhead
+//   overhead = custoProd * overhead_pct/100
+//   MC% = MC / precoVenda
+// simplificado: MC% = 1 - (1 + overhead_pct/100) / (M * (1 + I/100))
+function calcPec(markup) {
+  const m  = parseFloat(markup);
+  const oh = PEC_OVERHEAD_PCT / 100;
+  const iv = PEC_INVEST_VENDA_PCT / 100;
+  const fator = m * (1 + iv);         // precoVenda por unidade de custo direto
+  const mc_pct = (fator - (1 + oh)) / fator; // MC como fração do preço de venda
+
+  document.getElementById('pec_markup_val').textContent = '×' + m.toFixed(1);
+
+  const res = document.getElementById('pec_resultado');
+  if (!res) return;
+
+  if (mc_pct <= 0 || PEC_TOTAL <= 0) {
+    res.innerHTML = '<p class="text-muted text-sm">MC% negativa — markup insuficiente para cobrir overhead.</p>';
+    return;
+  }
+
+  const fat_min = PEC_TOTAL / mc_pct;
+  const margem_pct = mc_pct * 100;
+  const pedidos_500  = fat_min / 500;
+  const pedidos_1000 = fat_min / 1000;
+  const pedidos_2000 = fat_min / 2000;
+
+  res.innerHTML = `
+    <div class="pec-analise-linha">
+      <span>Margem de contribuição estimada</span>
+      <strong>${margem_pct.toFixed(1)}%</strong>
+    </div>
+    <div class="pec-analise-linha">
+      <span>Faturamento mínimo / mês</span>
+      <strong style="color:var(--primaria);font-size:1rem;">R$ ${fat_min.toFixed(2)}</strong>
+    </div>
+    <div class="pec-analise-linha">
+      <span>Faturamento mínimo / dia</span>
+      <strong>R$ ${(fat_min/22).toFixed(2)}</strong>
+    </div>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(233,69,96,.15);font-size:.78rem;color:var(--texto-muted);margin-bottom:6px;">
+      Pedidos necessários / mês para atingir equilíbrio:
+    </div>
+    <div class="pec-analise-linha">
+      <span>Ticket médio R$ 500</span><strong>${pedidos_500.toFixed(0)} pedidos</strong>
+    </div>
+    <div class="pec-analise-linha">
+      <span>Ticket médio R$ 1.000</span><strong>${pedidos_1000.toFixed(0)} pedidos</strong>
+    </div>
+    <div class="pec-analise-linha">
+      <span>Ticket médio R$ 2.000</span><strong>${pedidos_2000.toFixed(0)} pedidos</strong>
+    </div>
+  `;
+}
+
+// Inicializa
+calcPec({{ markup_padrao|float }});
+
+// ── Formulário ───────────────────────────────────────────────────────────────
+function abrirFormNovo() {
+  document.getElementById('form-titulo').textContent = 'Novo Custo Fixo';
+  document.getElementById('action-form-custo').action = '{{ url_for("pec_novo_custo") }}';
+  document.getElementById('custo_nome').value  = '';
+  document.getElementById('custo_cat').value   = 'outros';
+  document.getElementById('custo_valor').value = '';
+  document.getElementById('custo_obs').value   = '';
+  document.getElementById('custo_id_hidden').value = '';
+  document.getElementById('form-custo').style.display = 'block';
+  document.getElementById('form-custo').scrollIntoView({behavior:'smooth'});
+  lucide.createIcons();
+}
+
+function editarCusto(c) {
+  document.getElementById('form-titulo').textContent = '✏️ Editar: ' + c.nome;
+  document.getElementById('action-form-custo').action = `/precificacao/custo-fixo/${c.id}/editar`;
+  document.getElementById('custo_nome').value  = c.nome;
+  document.getElementById('custo_cat').value   = c.categoria;
+  document.getElementById('custo_valor').value = c.valor;
+  document.getElementById('custo_obs').value   = c.observacao || '';
+  document.getElementById('custo_id_hidden').value = c.id;
+  document.getElementById('form-custo').style.display = 'block';
+  document.getElementById('form-custo').scrollIntoView({behavior:'smooth'});
+  lucide.createIcons();
+}
+
+function fecharForm() {
+  document.getElementById('form-custo').style.display = 'none';
+}
+</script>
+{% endblock %}

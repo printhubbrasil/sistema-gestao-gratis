@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% block titulo %}Pedido #{{ pedido.id }}{% endblock %}
+{% block topbar_titulo %}Pedido #{{ pedido.id }}{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('imprimir_pedido', id=pedido.id) }}" target="_blank" class="btn btn-secundario">
+    <i data-lucide="printer"></i> Imprimir / PDF
+  </a>
+  <a href="{{ url_for('editar_pedido', id=pedido.id) }}" class="btn btn-secundario">
+    <i data-lucide="pencil"></i> Editar
+  </a>
+  <a href="{{ url_for('pedidos') }}" class="btn btn-secundario">
+    <i data-lucide="arrow-left"></i> Voltar
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;">
+  <div>
+    <div class="card mb-16">
+      <div class="card-header"><h3>Informações do Pedido</h3></div>
+      <div class="card-body">
+        <div class="form-grid form-grid-2">
+          <div>
+            <p class="text-muted text-sm mb-8">Cliente</p>
+            <p class="fw-600">{{ pedido.cliente_nome or '—' }}</p>
+          </div>
+          <div>
+            <p class="text-muted text-sm mb-8">Data</p>
+            <p>{{ pedido.created_at[:10] }}</p>
+          </div>
+          <div>
+            <p class="text-muted text-sm mb-8">Prazo</p>
+            <p>{{ pedido.prazo or '—' }}</p>
+          </div>
+          <div>
+            <p class="text-muted text-sm mb-8">Pagamento</p>
+            <p>{{ pedido.forma_pagamento or '—' }}</p>
+          </div>
+        </div>
+        {% if pedido.observacoes %}
+        <div class="mt-16" style="padding-top:16px;border-top:1px solid var(--borda);">
+          <p class="text-muted text-sm mb-8">Observações</p>
+          <p>{{ pedido.observacoes }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Itens</h3></div>
+      <div class="table-container">
+        {% if pedido.itens %}
+        <table>
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th class="text-right">Qtd</th>
+              <th class="text-right">Preço Unit.</th>
+              <th class="text-right">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for i in pedido.itens %}
+            <tr>
+              <td>{{ i.descricao or i.produto_nome or '—' }}</td>
+              <td class="text-right">{{ i.quantidade }}</td>
+              <td class="text-right">R$ {{ "%.2f"|format(i.preco_unitario) }}</td>
+              <td class="text-right fw-600">R$ {{ "%.2f"|format(i.subtotal) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="vazio"><p>Sem itens registrados.</p></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Resumo</h3></div>
+    <div class="card-body">
+      <div class="d-flex justify-between mb-8">
+        <span class="text-muted">Subtotal</span>
+        <span>R$ {{ "%.2f"|format(pedido.total + pedido.desconto) }}</span>
+      </div>
+      {% if pedido.desconto > 0 %}
+      <div class="d-flex justify-between mb-8">
+        <span class="text-muted">Desconto</span>
+        <span class="text-perigo">-R$ {{ "%.2f"|format(pedido.desconto) }}</span>
+      </div>
+      {% endif %}
+      <div class="d-flex justify-between" style="padding-top:12px;border-top:1px solid var(--borda);">
+        <span class="fw-700">Total</span>
+        <span class="fw-700 text-primaria" style="font-size:1.1rem;">R$ {{ "%.2f"|format(pedido.total) }}</span>
+      </div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--borda);">
+        <p class="text-muted text-sm mb-8">Status</p>
+        <span class="badge badge-{{ pedido.status }}">{{ pedido.status|title }}</span>
+      </div>
+      <div class="mt-16">
+        <a href="{{ url_for('emitir_nf') }}" class="btn btn-secundario w-full">
+          <i data-lucide="file-text"></i> Emitir NF
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

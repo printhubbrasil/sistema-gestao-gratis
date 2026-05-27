@@ -1,0 +1,338 @@
+{% extends 'base.html' %}
+{% block titulo %}Contas a Pagar{% endblock %}
+{% block topbar_titulo %}Contas a Pagar{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('custos') }}" class="btn btn-outline">
+    <i data-lucide="arrow-left"></i> Central de Custos
+  </a>
+  <button class="btn btn-primario" onclick="abrirModal('modal-nova-conta')">
+    <i data-lucide="plus"></i> Nova Conta
+  </button>
+{% endblock %}
+
+{% block conteudo %}
+<style>
+  .filtro-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+  .filtro-bar select, .filtro-bar input { height:36px; padding:0 10px; border:1px solid var(--borda); border-radius:8px; background:var(--card-bg); color:var(--texto); font-size:.85rem; }
+
+  .stats-contas { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
+  .stat-conta { background:var(--card-bg); border:1px solid var(--borda); border-radius:12px; padding:16px 18px; border-left:4px solid transparent; }
+  .stat-conta.vencido  { border-left-color:#ef4444; }
+  .stat-conta.pendente { border-left-color:#f59e0b; }
+  .stat-conta.pago     { border-left-color:#22c55e; }
+  .stat-conta .label { font-size:.73rem; color:var(--texto-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .stat-conta .valor { font-size:1.4rem; font-weight:800; font-family:monospace; }
+  .stat-conta.vencido  .valor { color:#ef4444; }
+  .stat-conta.pendente .valor { color:#f59e0b; }
+  .stat-conta.pago     .valor { color:#22c55e; }
+
+  .badge-status { display:inline-block; padding:3px 10px; border-radius:20px; font-size:.73rem; font-weight:700; }
+  .badge-pago     { background:rgba(34,197,94,.12); color:#16a34a; border:1px solid rgba(34,197,94,.3); }
+  .badge-pendente { background:rgba(245,158,11,.12); color:#d97706; border:1px solid rgba(245,158,11,.3); }
+  .badge-vencido  { background:rgba(239,68,68,.12); color:#dc2626; border:1px solid rgba(239,68,68,.3); }
+
+  .filtro-status { display:flex; gap:6px; flex-wrap:wrap; }
+  .filtro-status a { padding:5px 14px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--borda); color:var(--texto-muted); text-decoration:none; transition:all .15s; }
+  .filtro-status a.ativo, .filtro-status a:hover { background:var(--primaria); color:white; border-color:var(--primaria); }
+
+  .dias-vencer { font-size:.75rem; color:var(--texto-muted); }
+  .dias-vencer.urgente { color:#ef4444; font-weight:600; }
+  .dias-vencer.ok      { color:#22c55e; }
+
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.aberto { display:flex; }
+  .modal-box { background:var(--card-bg); border-radius:16px; padding:28px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal-titulo { font-size:1.1rem; font-weight:700; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; }
+  .modal-close { cursor:pointer; color:var(--texto-muted); background:none; border:none; font-size:1.3rem; line-height:1; }
+  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .form-group { display:flex; flex-direction:column; gap:5px; }
+  .form-group label { font-size:.78rem; font-weight:600; color:var(--texto-muted); }
+  .form-group input, .form-group select, .form-group textarea { padding:9px 12px; border:1px solid var(--borda); border-radius:8px; background:var(--fundo); color:var(--texto); font-size:.88rem; }
+  .form-group textarea { resize:vertical; min-height:56px; }
+  .form-group.span2 { grid-column:span 2; }
+  .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+
+  .pagar-inline { display:flex; align-items:center; gap:6px; }
+  .pagar-inline input[type=date] { height:30px; padding:0 8px; border:1px solid var(--borda); border-radius:6px; background:var(--fundo); color:var(--texto); font-size:.8rem; }
+</style>
+
+<!-- Stats -->
+<div class="stats-contas">
+  <div class="stat-conta vencido">
+    <div class="label">Vencido</div>
+    <div class="valor">R$ {{ "%.2f"|format(resumo.vencido) }}</div>
+  </div>
+  <div class="stat-conta pendente">
+    <div class="label">A Vencer</div>
+    <div class="valor">R$ {{ "%.2f"|format(resumo.pendente) }}</div>
+  </div>
+  <div class="stat-conta pago">
+    <div class="label">Pago (filtro)</div>
+    <div class="valor">R$ {{ "%.2f"|format(resumo.pago) }}</div>
+  </div>
+</div>
+
+<!-- Filtros -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+  <div class="filtro-status">
+    <a href="{{ url_for('contas_pagar', mes=mes, ano=ano) }}" class="{% if not status %}ativo{% endif %}">Todas</a>
+    <a href="{{ url_for('contas_pagar', mes=mes, ano=ano, status='vencido') }}" class="{% if status=='vencido' %}ativo{% endif %}">Vencidas</a>
+    <a href="{{ url_for('contas_pagar', mes=mes, ano=ano, status='pendente') }}" class="{% if status=='pendente' %}ativo{% endif %}">Pendentes</a>
+    <a href="{{ url_for('contas_pagar', mes=mes, ano=ano, status='pago') }}" class="{% if status=='pago' %}ativo{% endif %}">Pagas</a>
+  </div>
+  <form method="GET" action="{{ url_for('contas_pagar') }}" class="filtro-bar" style="margin:0">
+    <input type="hidden" name="status" value="{{ status }}">
+    <select name="mes" onchange="this.form.submit()">
+      {% for m in range(1,13) %}
+      <option value="{{ m }}" {% if m==mes %}selected{% endif %}>
+        {{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}/{{ ano }}
+      </option>
+      {% endfor %}
+    </select>
+    <select name="ano" onchange="this.form.submit()">
+      {% for a in range(2024, 2030) %}
+      <option value="{{ a }}" {% if a==ano %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<!-- Tabela -->
+<div class="card">
+  <div class="table-container">
+    {% if contas %}
+    <table>
+      <thead>
+        <tr>
+          <th>Vencimento</th>
+          <th>Descrição / Fornecedor</th>
+          <th>Forma</th>
+          <th>Status</th>
+          <th class="text-right">Valor</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in contas %}
+        <tr>
+          <td style="white-space:nowrap">
+            <span class="{% if c.status=='vencido' %}text-perigo{% elif c.status=='pago' %}text-sucesso{% endif %}" style="font-weight:600">
+              {{ c.vencimento[8:10] }}/{{ c.vencimento[5:7] }}/{{ c.vencimento[:4] }}
+            </span>
+            {% if c.status != 'pago' %}
+              {% set diff = (c.vencimento|string) %}
+              <div class="dias-vencer {% if c.status=='vencido' %}urgente{% elif c.status=='pendente' %}ok{% endif %}" id="dias-{{ c.id }}" data-venc="{{ c.vencimento }}"></div>
+            {% else %}
+              <div class="dias-vencer ok">pago em {{ c.pago_em[8:10] }}/{{ c.pago_em[5:7] }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <span style="font-weight:600">{{ c.descricao }}</span>
+            {% if c.fornecedor %}<br><small class="text-muted">{{ c.fornecedor }}</small>{% endif %}
+            {% if c.observacao %}<br><small class="text-muted">{{ c.observacao }}</small>{% endif %}
+          </td>
+          <td class="text-muted" style="font-size:.82rem">{{ formas.get(c.forma_pagamento, c.forma_pagamento) }}</td>
+          <td>
+            <span class="badge-status badge-{{ c.status }}">
+              {% if c.status=='pago' %}Pago{% elif c.status=='vencido' %}Vencido{% else %}Pendente{% endif %}
+            </span>
+          </td>
+          <td class="text-right fw-700" style="font-family:monospace;white-space:nowrap;color:{% if c.status=='pago' %}var(--sucesso){% elif c.status=='vencido' %}#ef4444{% else %}var(--texto){% endif %}">
+            R$ {{ "%.2f"|format(c.valor) }}
+          </td>
+          <td style="white-space:nowrap">
+            {% if c.status != 'pago' %}
+            <form method="POST" action="{{ url_for('pagar_conta', id=c.id) }}" style="display:inline-flex;align-items:center;gap:4px">
+              <input type="hidden" name="mes_filtro" value="{{ mes }}">
+              <input type="hidden" name="ano_filtro" value="{{ ano }}">
+              <input type="date" name="data_pagamento" value="{{ hoje }}" style="height:28px;padding:0 6px;border:1px solid var(--borda);border-radius:6px;background:var(--fundo);color:var(--texto);font-size:.78rem;">
+              <button class="btn btn-sm" style="background:#22c55e;color:white;padding:4px 8px" title="Marcar como pago">
+                <i data-lucide="check" style="width:13px;height:13px"></i>
+              </button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('estornar_conta', id=c.id) }}" style="display:inline" onsubmit="return confirm('Estornar pagamento?')">
+              <input type="hidden" name="mes_filtro" value="{{ mes }}">
+              <input type="hidden" name="ano_filtro" value="{{ ano }}">
+              <button class="btn btn-sm btn-outline" title="Estornar">
+                <i data-lucide="rotate-ccw" style="width:13px;height:13px"></i>
+              </button>
+            </form>
+            {% endif %}
+            <button class="btn btn-sm btn-outline" onclick="editarConta({{ c|tojson }})" title="Editar">
+              <i data-lucide="pencil" style="width:13px;height:13px"></i>
+            </button>
+            <form method="POST" action="{{ url_for('excluir_conta_pagar', id=c.id) }}" style="display:inline" onsubmit="return confirm('Excluir esta conta?')">
+              <input type="hidden" name="mes_filtro" value="{{ mes }}">
+              <input type="hidden" name="ano_filtro" value="{{ ano }}">
+              <button class="btn btn-sm btn-perigo" title="Excluir">
+                <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="file-check-2"></i>
+      <p>Nenhuma conta encontrada para o filtro selecionado.</p>
+      <button class="btn btn-primario mt-8" onclick="abrirModal('modal-nova-conta')">
+        <i data-lucide="plus"></i> Cadastrar conta
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── MODAL: Nova Conta ───────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-nova-conta">
+  <div class="modal-box">
+    <div class="modal-titulo">
+      Nova Conta a Pagar
+      <button class="modal-close" onclick="fecharModal('modal-nova-conta')">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('nova_conta_pagar') }}">
+      <input type="hidden" name="mes_filtro" value="{{ mes }}">
+      <input type="hidden" name="ano_filtro" value="{{ ano }}">
+      <div class="form-grid-2">
+        <div class="form-group span2">
+          <label>Descrição *</label>
+          <input type="text" name="descricao" placeholder="Ex: Boleto Papel Chamex — Mai/2026" required autofocus>
+        </div>
+        <div class="form-group span2">
+          <label>Fornecedor</label>
+          <input type="text" name="fornecedor" placeholder="Nome do fornecedor (opcional)" list="lista-fornecedores" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Vencimento *</label>
+          <input type="date" name="vencimento" id="nova-venc" required>
+        </div>
+        <div class="form-group">
+          <label>Valor *</label>
+          <input type="number" name="valor" step="0.01" min="0" placeholder="0,00" required>
+        </div>
+        <div class="form-group span2">
+          <label>Forma de Pagamento</label>
+          <select name="forma_pagamento">
+            {% for k, v in formas.items() %}
+            <option value="{{ k }}" {% if k=='boleto' %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label>Observação</label>
+          <textarea name="observacao" placeholder="Número do boleto, nota, etc..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="fecharModal('modal-nova-conta')">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Datalist de fornecedores cadastrados -->
+<datalist id="lista-fornecedores">
+  {% for f in fornecedores %}
+  <option value="{{ f.nome }}">{% if f.produto_servico %} — {{ f.produto_servico }}{% endif %}</option>
+  {% endfor %}
+</datalist>
+
+<!-- ── MODAL: Editar Conta ────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-editar-conta">
+  <div class="modal-box">
+    <div class="modal-titulo">
+      Editar Conta
+      <button class="modal-close" onclick="fecharModal('modal-editar-conta')">✕</button>
+    </div>
+    <form method="POST" id="form-editar-conta">
+      <input type="hidden" name="mes_filtro" value="{{ mes }}">
+      <input type="hidden" name="ano_filtro" value="{{ ano }}">
+      <div class="form-grid-2">
+        <div class="form-group span2">
+          <label>Descrição *</label>
+          <input type="text" name="descricao" id="ec-desc" required>
+        </div>
+        <div class="form-group span2">
+          <label>Fornecedor</label>
+          <input type="text" name="fornecedor" id="ec-forn" list="lista-fornecedores" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Vencimento *</label>
+          <input type="date" name="vencimento" id="ec-venc" required>
+        </div>
+        <div class="form-group">
+          <label>Valor *</label>
+          <input type="number" name="valor" id="ec-valor" step="0.01" min="0" required>
+        </div>
+        <div class="form-group span2">
+          <label>Forma de Pagamento</label>
+          <select name="forma_pagamento" id="ec-forma">
+            {% for k, v in formas.items() %}
+            <option value="{{ k }}">{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label>Observação</label>
+          <textarea name="observacao" id="ec-obs"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="fecharModal('modal-editar-conta')">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar Alterações</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EDITAR_CONTA_BASE = '{{ url_for("editar_conta_pagar", id=0) }}';
+
+function abrirModal(id) { document.getElementById(id).classList.add('aberto'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('aberto'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('aberto'); });
+});
+
+document.getElementById('nova-venc').value = '{{ hoje }}';
+
+function editarConta(c) {
+  document.getElementById('ec-desc').value  = c.descricao;
+  document.getElementById('ec-forn').value  = c.fornecedor || '';
+  document.getElementById('ec-venc').value  = c.vencimento;
+  document.getElementById('ec-valor').value = c.valor;
+  document.getElementById('ec-forma').value = c.forma_pagamento;
+  document.getElementById('ec-obs').value   = c.observacao || '';
+  document.getElementById('form-editar-conta').action = EDITAR_CONTA_BASE.replace('/0/', '/' + c.id + '/');
+  abrirModal('modal-editar-conta');
+}
+
+// Calcular dias até vencer
+document.querySelectorAll('[data-venc]').forEach(el => {
+  const venc = new Date(el.dataset.venc + 'T00:00:00');
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const diff = Math.round((venc - hoje) / 86400000);
+  if (diff < 0) {
+    el.textContent = Math.abs(diff) + (Math.abs(diff) === 1 ? ' dia em atraso' : ' dias em atraso');
+    el.classList.add('urgente');
+  } else if (diff === 0) {
+    el.textContent = 'vence hoje';
+    el.classList.add('urgente');
+  } else if (diff <= 5) {
+    el.textContent = 'vence em ' + diff + (diff === 1 ? ' dia' : ' dias');
+    el.classList.add('urgente');
+  } else {
+    el.textContent = 'vence em ' + diff + ' dias';
+    el.classList.add('ok');
+  }
+});
+</script>
+{% endblock %}

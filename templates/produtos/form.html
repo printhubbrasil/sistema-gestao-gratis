@@ -1,0 +1,683 @@
+{% extends 'base.html' %}
+{% block titulo %}{{ 'Editar Produto' if produto else 'Novo Produto' }}{% endblock %}
+
+{% block topbar_titulo %}
+  <span class="text-muted" style="font-weight:400;font-size:.85rem;">Produto</span>
+  <span style="margin:0 6px;color:var(--borda)">|</span>
+  {{ 'Editar: ' ~ produto.nome if produto else 'Novo Produto' }}
+{% endblock %}
+
+{% block topbar_acoes %}
+  <a href="{{ url_for('produtos') }}" class="btn btn-secundario">« Voltar</a>
+  <button type="submit" form="form-produto" class="btn btn-sucesso">
+    <i data-lucide="check"></i> Salvar produto
+  </button>
+{% endblock %}
+
+{% block conteudo %}
+{% set p = produto or {} %}
+{% set cats_selecionadas = p.categorias if p.categorias is defined else [] %}
+
+<style>
+.tabs-nav { display:flex; gap:0; border-bottom:2px solid var(--borda); margin-bottom:24px; }
+.tab-btn {
+  padding:10px 18px; font-size:.85rem; font-weight:500; color:var(--texto-leve);
+  background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px;
+  cursor:pointer; transition:all .15s ease; display:flex; align-items:center; gap:6px;
+}
+.tab-btn:hover { color:var(--texto); }
+.tab-btn.ativa { color:#4F46E5; border-bottom-color:#4F46E5; font-weight:600; }
+.tab-btn svg { width:14px; height:14px; }
+.tab-pane { display:none; }
+.tab-pane.ativa { display:block; }
+.section-title {
+  font-size:.9rem; font-weight:600; color:var(--texto);
+  display:flex; align-items:center; gap:8px; margin-bottom:20px;
+  padding-bottom:10px; border-bottom:1px solid var(--borda);
+}
+.section-title svg { width:16px; height:16px; color:var(--texto-leve); }
+.tipo-preco-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:24px; }
+.tipo-preco-card {
+  border:1.5px solid var(--borda); border-radius:8px; padding:14px 12px;
+  cursor:pointer; transition:all .15s ease; text-align:center;
+}
+.tipo-preco-card:hover { border-color:#4F46E5; background:rgba(79,70,229,.04); }
+.tipo-preco-card.selecionado { border-color:#4F46E5; background:rgba(79,70,229,.06); }
+.tipo-preco-card input { display:none; }
+.tipo-preco-card .tp-label { font-size:.8rem; font-weight:600; color:#4F46E5; margin-bottom:4px; }
+.tipo-preco-card .tp-desc { font-size:.72rem; color:var(--texto-leve); }
+.preco-table { border:1px solid var(--borda); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+.preco-row {
+  display:grid;
+  grid-template-columns:100px 120px 130px 120px 90px 90px 90px 90px 36px;
+  gap:0;
+}
+.preco-row > * { padding:8px 10px; border-right:1px solid var(--borda); }
+.preco-row > *:last-child { border-right:none; }
+.preco-header { background:#FAFBFC; font-size:.72rem; font-weight:600; color:var(--texto-leve); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--borda); }
+.preco-row .form-control { border:none; padding:6px 8px; font-size:.82rem; border-radius:0; }
+.preco-row .form-control:focus { box-shadow:inset 0 0 0 2px var(--primaria); }
+.var-row { display:grid; grid-template-columns:160px 1fr 120px 120px 140px 36px; gap:0; }
+.var-row > * { padding:8px 10px; border-right:1px solid var(--borda); }
+.var-row > *:last-child { border-right:none; }
+.cat-list { display:flex; flex-direction:column; gap:6px; }
+.cat-item { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; cursor:pointer; }
+.cat-item:hover { background:var(--fundo); }
+.cat-item input[type=checkbox] { width:16px; height:16px; accent-color:#4F46E5; cursor:pointer; }
+.cat-item label { cursor:pointer; font-size:.875rem; }
+.cat-sub { padding-left:24px; display:flex; flex-direction:column; gap:4px; }
+.trib-section { margin-bottom:24px; }
+.trib-section h4 { font-size:.8rem; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--texto-leve); margin-bottom:12px; }
+</style>
+
+<form method="post" id="form-produto">
+  <input type="hidden" name="precos_json" id="precos_json">
+  <input type="hidden" name="variacoes_json" id="variacoes_json">
+
+  <!-- TABS NAV -->
+  <div class="tabs-nav">
+    <button type="button" class="tab-btn ativa" data-tab="geral"><i data-lucide="info"></i> Geral</button>
+    <button type="button" class="tab-btn" data-tab="detalhes"><i data-lucide="list"></i> Detalhes</button>
+    <button type="button" class="tab-btn" data-tab="imagens"><i data-lucide="image"></i> Imagens</button>
+    <button type="button" class="tab-btn" data-tab="preco"><i data-lucide="dollar-sign"></i> Preço</button>
+    <button type="button" class="tab-btn" data-tab="categorias"><i data-lucide="tag"></i> Categorias</button>
+    <button type="button" class="tab-btn" data-tab="tributacao"><i data-lucide="file-text"></i> Tributação</button>
+  </div>
+
+  <!-- ─── ABA GERAL ─────────────────────────────────────────────────────── -->
+  <div class="tab-pane ativa" id="tab-geral">
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start;">
+      <div>
+        <div class="card mb-16">
+          <div class="card-header"><h3>Informações do produto</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Título *</label>
+              <input type="text" name="nome" class="form-control" required value="{{ p.nome or '' }}" placeholder="Ex.: Cartão de visita">
+            </div>
+            <div class="form-group">
+              <label>Prazo de produção</label>
+              <input type="text" name="prazo_producao" class="form-control" value="{{ p.prazo_producao or '' }}" placeholder="Ex.: 2 dias úteis">
+            </div>
+            <div class="form-group">
+              <label>Selo de destaque</label>
+              <select name="selo_destaque" class="form-control">
+                {% for s in ['Nenhum','Novo','Promoção','Destaque','Mais Vendido'] %}
+                <option {% if (p.selo_destaque or 'Nenhum') == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-grid form-grid-2">
+              <div class="form-group">
+                <label>Código do produto (SKU)</label>
+                <input type="text" name="sku" class="form-control" value="{{ p.sku or '' }}">
+              </div>
+              <div class="form-group">
+                <label>MPN</label>
+                <input type="text" name="mpn" class="form-control" value="{{ p.mpn or '' }}">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>GTIN/EAN — Código de barras</label>
+              <input type="text" name="gtin_ean" class="form-control" value="{{ p.gtin_ean or '' }}" placeholder="Código de barras">
+            </div>
+            <div class="form-grid form-grid-2">
+              <div class="form-group">
+                <label>Como pode ser despachado?</label>
+                <select name="como_despachado" class="form-control">
+                  {% for op in ['Todos','Somente entrega','Somente retirada'] %}
+                  <option {% if (p.como_despachado or 'Todos') == op %}selected{% endif %}>{{ op }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Quem pode comprar?</label>
+                <select name="quem_pode_comprar" class="form-control">
+                  {% for op in ['Todos','Somente cadastrados','Somente revendedores'] %}
+                  <option {% if (p.quem_pode_comprar or 'Todos') == op %}selected{% endif %}>{{ op }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Onde o produto ficará visível? *</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+                {% set opcoes = [
+                  ('visivel_geral','Geral'),
+                  ('visivel_orcamento','Orçamento à Jato'),
+                  ('visivel_painel','Painel de Controle'),
+                  ('visivel_calculadora','Calculadora Virtual'),
+                  ('visivel_loja','Loja virtual'),
+                ] %}
+                {% for field, label in opcoes %}
+                <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--borda);border-radius:6px;cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="{{ field }}" value="1" style="accent-color:#4F46E5;" {% if p.get(field, 1 if field in ['visivel_painel','visivel_loja'] else 0) %}checked{% endif %}>
+                  {{ label }}
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ESPECIFICAÇÕES -->
+      <div class="card">
+        <div class="card-header">
+          <h3><i data-lucide="printer" style="width:15px;height:15px;margin-right:6px;vertical-align:middle;"></i>Especificações</h3>
+        </div>
+        <div class="card-body">
+          {% for field, label, placeholder in [
+            ('espec_formato','Formato','Ex.: 10x15cm'),
+            ('espec_material','Material','Ex.: Couchê 250gr'),
+            ('espec_revestimento','Revestimento','Ex.: Verniz UV Total Frente'),
+            ('espec_acabamento','Acabamento','Ex.: Corte reto'),
+            ('espec_cores','Cores / Impressão','Ex.: 4x0, 4x1, 4x4'),
+            ('espec_extras','Extras',''),
+          ] %}
+          <div class="form-group">
+            <label>{{ label }}</label>
+            <input type="text" name="{{ field }}" class="form-control" value="{{ p.get(field, '') or '' }}" placeholder="{{ placeholder }}">
+          </div>
+          {% endfor %}
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label>O produto precisa de arte? *</label>
+              <select name="precisa_arte" class="form-control">
+                {% for op in ['Não precisa de arte','Precisa de arte','Arte opcional'] %}
+                <option {% if (p.precisa_arte or 'Não precisa de arte') == op %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Valor para criação da arte</label>
+              <div style="display:flex;align-items:center;gap:0;">
+                <span style="padding:9px 12px;background:#F8F9FA;border:1.5px solid var(--borda);border-right:none;border-radius:6px 0 0 6px;font-size:.8rem;color:var(--texto-leve);">R$</span>
+                <input type="number" name="valor_arte" class="form-control" style="border-radius:0 6px 6px 0;" min="0" step="0.01" value="{{ p.valor_arte or '' }}" placeholder="0,00">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ABA DETALHES ──────────────────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-detalhes">
+    <div class="card mb-16">
+      <div class="card-header"><h3>Variações do Produto</h3></div>
+      <div class="card-body" style="padding:0;">
+        <div class="preco-table" id="var-table">
+          <div class="var-row preco-header">
+            <span>Variação</span><span>Nome da variação</span><span>Preço de venda</span>
+            <span>Custo</span><span>Forma de cobrança</span><span></span>
+          </div>
+          <div id="var-lista">
+            {% if p.variacoes %}
+              {% for v in p.variacoes %}
+              <div class="var-row var-linha">
+                <input type="text" class="form-control var-tipo" placeholder="Ex: Tamanho" value="{{ v.variacao_tipo or '' }}">
+                <input type="text" class="form-control var-nome" placeholder="Ex: P, M, G, GG" value="{{ v.nome or '' }}">
+                <input type="number" class="form-control var-preco" min="0" step="0.01" placeholder="0,00" value="{{ v.preco_venda or '' }}">
+                <input type="number" class="form-control var-custo" min="0" step="0.01" placeholder="0,00" value="{{ v.custo or '' }}">
+                <select class="form-control var-cobranca" style="border-radius:0;">
+                  {% for u in ['Unidade','Metro','Quilograma','Litro'] %}
+                  <option {% if v.forma_cobranca == u %}selected{% endif %}>{{ u }}</option>
+                  {% endfor %}
+                </select>
+                <div style="display:flex;align-items:center;justify-content:center;">
+                  <button type="button" class="btn btn-ghost btn-sm btn-rm-var" style="color:var(--perigo)"><i data-lucide="trash-2"></i></button>
+                </div>
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid var(--borda);">
+          <button type="button" id="btn-add-var" class="btn btn-primario btn-sm">
+            <i data-lucide="plus"></i> Adicionar variação
+          </button>
+          <label style="margin-left:16px;font-size:.82rem;cursor:pointer;">
+            <input type="checkbox" style="accent-color:#4F46E5;"> Obrigatório selecionar
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-16">
+      <div class="card-header"><h3>Controle de estoque</h3></div>
+      <div class="card-body">
+        <div class="form-group" style="max-width:300px;">
+          <label>Gerenciar o estoque deste produto?</label>
+          <select name="gerenciar_estoque" class="form-control">
+            <option>Não</option>
+            <option>Sim</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Descrição e vídeo do produto</h3></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>URL do vídeo do produto no Youtube</label>
+          <div style="display:flex;align-items:center;gap:0;">
+            <span style="padding:9px 12px;background:#F8F9FA;border:1.5px solid var(--borda);border-right:none;border-radius:6px 0 0 6px;">
+              <i data-lucide="youtube" style="width:14px;height:14px;color:#EF4444;"></i>
+            </span>
+            <input type="url" name="url_video" class="form-control" style="border-radius:0 6px 6px 0;" value="{{ p.url_video or '' }}" placeholder="Ex.: https://www.youtube.com/watch?v=...">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Descrição curta</label>
+          <input type="text" name="descricao_curta" class="form-control" value="{{ p.descricao_curta or '' }}" placeholder="Resumo breve do produto">
+        </div>
+        <div class="form-group">
+          <label>Descrição do produto</label>
+          <textarea name="descricao" class="form-control" rows="4" placeholder="Descrição completa, especificações detalhadas...">{{ p.descricao or '' }}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ABA IMAGENS ───────────────────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-imagens">
+    <div class="card">
+      <div class="card-header"><h3>Imagem principal e detalhadas</h3></div>
+      <div class="card-body">
+        <div class="alert alert-warning mb-16">
+          <i data-lucide="alert-triangle" style="width:16px;height:16px;flex-shrink:0;"></i>
+          <span><strong>Atenção!</strong> As imagens devem ter no mínimo <strong>600x600px</strong> sendo o ideal <strong>1000x1000px</strong>.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:260px 1fr;gap:32px;align-items:start;">
+          <div id="img-preview" style="width:260px;height:260px;background:#F1F5F9;border-radius:10px;display:flex;align-items:center;justify-content:center;border:2px dashed var(--borda);">
+            <i data-lucide="image" style="width:48px;height:48px;color:#CBD5E1;"></i>
+          </div>
+          <div>
+            <div class="form-group">
+              <label style="font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">⭐ IMAGEM PRINCIPAL</label>
+              <input type="file" name="imagem_principal" class="form-control" accept="image/*" onchange="previewImg(this)">
+              <p class="text-muted text-sm mt-16">Esta imagem ficará visível na loja e será a imagem de identificação</p>
+            </div>
+            <div class="form-group mt-16">
+              <label style="font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">DETALHADAS</label>
+              <input type="file" name="imagens_detalhadas" class="form-control" accept="image/*" multiple>
+              <p class="text-muted text-sm mt-16">Estas imagens ficarão visíveis na página do produto</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ABA PREÇO ─────────────────────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-preco">
+    <div class="card mb-16">
+      <div class="card-header"><h3>Como o produto será vendido?</h3></div>
+      <div class="card-body">
+        <div class="tipo-preco-grid">
+          {% set tipos = [
+            ('quantidade','PREÇO POR QUANTIDADE','Valores e quantidades pré-definidas'),
+            ('metro','PREÇO POR METRO','Para formatos personalizados'),
+            ('fixo','PREÇO FIXO','Venda por unidades'),
+            ('demanda','PREÇO POR DEMANDA','De acordo com a quantidade'),
+            ('consulta','SOB CONSULTA','Não é vendido online'),
+          ] %}
+          {% for val, label, desc in tipos %}
+          <label class="tipo-preco-card {% if (p.tipo_preco or 'quantidade') == val %}selecionado{% endif %}">
+            <input type="radio" name="tipo_preco" value="{{ val }}" {% if (p.tipo_preco or 'quantidade') == val %}checked{% endif %} onchange="marcarTipo(this)">
+            <div class="tp-label">{{ label }}</div>
+            <div class="tp-desc">{{ desc }}</div>
+          </label>
+          {% endfor %}
+        </div>
+
+        <div class="preco-table" id="preco-table">
+          <div class="preco-row preco-header">
+            <span>QUANT. *</span><span>PREÇO ANTERIOR</span><span>PREÇO VENDA *</span>
+            <span>PREÇO CUSTO</span><span>PESO (KG)</span><span>LARGURA (CM)</span>
+            <span>ALTURA (CM)</span><span>COMPRIMENTO (CM)</span><span></span>
+          </div>
+          <div id="preco-lista">
+            {% if p.precos %}
+              {% for pr in p.precos %}
+              <div class="preco-row preco-linha">
+                <input type="number" class="form-control pc-qtd" min="1" value="{{ pr.quantidade or '' }}" placeholder="">
+                <input type="number" class="form-control pc-ant" min="0" step="0.01" value="{{ pr.preco_anterior or '' }}" placeholder="">
+                <input type="number" class="form-control pc-venda" min="0" step="0.01" value="{{ pr.preco_venda or '' }}" placeholder="">
+                <input type="number" class="form-control pc-custo" min="0" step="0.01" value="{{ pr.preco_custo or '' }}" placeholder="">
+                <input type="number" class="form-control pc-peso" min="0" step="0.001" value="{{ pr.peso or '' }}" placeholder="">
+                <input type="number" class="form-control pc-larg" min="0" step="0.1" value="{{ pr.largura or '' }}" placeholder="">
+                <input type="number" class="form-control pc-alt" min="0" step="0.1" value="{{ pr.altura or '' }}" placeholder="">
+                <input type="number" class="form-control pc-comp" min="0" step="0.1" value="{{ pr.comprimento or '' }}" placeholder="">
+                <div style="display:flex;align-items:center;justify-content:center;">
+                  <button type="button" class="btn btn-ghost btn-sm btn-rm-preco"><i data-lucide="x"></i></button>
+                </div>
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+        <button type="button" id="btn-add-preco" class="btn btn-primario btn-sm mt-16">
+          <i data-lucide="plus"></i> Adicionar valor
+        </button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div class="card">
+        <div class="card-header"><h3>Desconto para revendedor</h3></div>
+        <div class="card-body">
+          <p class="text-muted text-sm mb-16">Ofereça um desconto especial para seus revendedores.</p>
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label>Tipo</label>
+              <select name="desconto_revendedor_tipo" class="form-control">
+                <option {% if (p.desconto_revendedor_tipo or '%') == '%' %}selected{% endif %}>%</option>
+                <option {% if p.desconto_revendedor_tipo == 'R$' %}selected{% endif %}>R$</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Valor do desconto</label>
+              <input type="number" name="desconto_revendedor_valor" class="form-control" min="0" step="0.01" value="{{ p.desconto_revendedor_valor or '' }}" placeholder="">
+            </div>
+          </div>
+          <p class="text-muted text-sm">Não pode ser maior que o valor do produto</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Cronômetro de oferta</h3></div>
+        <div class="card-body">
+          <p class="text-muted text-sm mb-16">Exibe contagem regressiva até a oferta expirar.</p>
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label>Condição</label>
+              <select name="oferta_condicao" class="form-control">
+                <option>Desativado</option>
+                <option>Ativado</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Oferta expira em</label>
+              <input type="date" name="oferta_expira" class="form-control">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ABA CATEGORIAS ────────────────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-categorias">
+    <div class="card">
+      <div class="card-header">
+        <h3>Organize as categorias do produto</h3>
+        <span class="text-muted text-sm">Selecione uma ou mais categorias</span>
+      </div>
+      <div class="card-body">
+        {% set arvore = [
+          ('Cartões de Visita', []),
+          ('Flyers e Folhetos', []),
+          ('Folders', []),
+          ('Adesivos e Etiquetas', []),
+          ('Banners e Faixas', []),
+          ('Lona Impressa', ['Lona sem Acabamento', 'Lona com Ilhós']),
+          ('Sublimação e Silk-screen', ['Camisetas Personalizadas', 'Canecas Personalizadas', 'Brindes Personalizados']),
+          ('UV Plano', []),
+          ('Apostilas, Fotos e Outros', []),
+        ] %}
+        <div class="cat-list">
+          {% for cat, subs in arvore %}
+          <div>
+            <div class="cat-item">
+              <input type="checkbox" name="categorias_sel" value="{{ cat }}" id="cat-{{ loop.index }}"
+                {% if cat in cats_selecionadas %}checked{% endif %}>
+              <label for="cat-{{ loop.index }}">{{ cat }}</label>
+            </div>
+            {% if subs %}
+            <div class="cat-sub">
+              {% for sub in subs %}
+              <div class="cat-item">
+                <input type="checkbox" name="categorias_sel" value="{{ sub }}" id="cat-{{ loop.index }}-{{ loop.index0 }}"
+                  {% if sub in cats_selecionadas %}checked{% endif %}>
+                <label for="cat-{{ loop.index }}-{{ loop.index0 }}">{{ sub }}</label>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ABA TRIBUTAÇÃO ────────────────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-tributacao">
+    <div class="card">
+      <div class="card-header"><h3>Dados para nota fiscal</h3></div>
+      <div class="card-body">
+        <div class="form-grid" style="grid-template-columns:120px 1fr 1fr 1fr;margin-bottom:24px;">
+          <div class="form-group">
+            <label>Unidade</label>
+            <input type="text" name="unidade" class="form-control" value="{{ p.unidade or '' }}" placeholder="UN">
+          </div>
+          <div class="form-group">
+            <label>NCM</label>
+            <input type="text" name="ncm" class="form-control" value="{{ p.ncm or '' }}" placeholder="Ex.: 4911.99.00">
+          </div>
+          <div class="form-group">
+            <label>CFOP</label>
+            <input type="text" name="cfop" class="form-control" value="{{ p.cfop or '' }}" placeholder="Ex.: 5102">
+          </div>
+          <div class="form-group">
+            <label>CEST</label>
+            <input type="text" name="cest" class="form-control" value="{{ p.cest or '' }}" placeholder="Ex.: 0100100">
+          </div>
+        </div>
+
+        <div class="trib-section">
+          <h4>ICMS</h4>
+          <div class="form-grid" style="grid-template-columns:2fr 2fr 1fr 1fr;">
+            <div class="form-group">
+              <label>Origem da mercadoria</label>
+              <select name="icms_origem" class="form-control">
+                {% for op in ['0 - Nacional, exceto as indicadas nos códigos 3, 4, 5 e 8','1 - Estrangeira','2 - Estrangeira adquirida no mercado interno'] %}
+                <option {% if (p.icms_origem or '0') == op[0] %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Código de situação tributária</label>
+              <select name="icms_cst" class="form-control">
+                {% for op in ['00 - Tributada integralmente','10 - Tributada e com cobrança do ICMS','20 - Com redução de base de cálculo','40 - Isenta','41 - Não tributada','60 - Cobrado anteriormente por ST'] %}
+                <option {% if (p.icms_cst or '00') == op[:2] %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Alíquota do ICMS</label>
+              <div style="display:flex;"><input type="number" name="icms_aliquota" class="form-control" style="border-radius:6px 0 0 6px;" min="0" step="0.01" value="{{ p.icms_aliquota or '' }}"><span style="padding:9px 10px;background:#F8F9FA;border:1.5px solid var(--borda);border-left:none;border-radius:0 6px 6px 0;font-size:.8rem;">%</span></div>
+            </div>
+            <div class="form-group">
+              <label>BC Operação Própria</label>
+              <div style="display:flex;"><input type="number" name="icms_bc" class="form-control" style="border-radius:6px 0 0 6px;" min="0" step="0.01" value=""><span style="padding:9px 10px;background:#F8F9FA;border:1.5px solid var(--borda);border-left:none;border-radius:0 6px 6px 0;font-size:.8rem;">%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="trib-section">
+          <h4>IPI</h4>
+          <div class="form-grid" style="grid-template-columns:2fr 1fr 2fr;">
+            <div class="form-group">
+              <label>Código de situação tributária</label>
+              <select name="ipi_cst" class="form-control">
+                {% for op in ['00 - Entrada com recuperação de crédito','49 - Outras entradas','50 - Saída tributada','99 - Outras saídas'] %}
+                <option {% if (p.ipi_cst or '00') == op[:2] %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Alíquota do IPI</label>
+              <div style="display:flex;"><input type="number" name="ipi_aliquota" class="form-control" style="border-radius:6px 0 0 6px;" min="0" step="0.01" value="{{ p.ipi_aliquota or '' }}"><span style="padding:9px 10px;background:#F8F9FA;border:1.5px solid var(--borda);border-left:none;border-radius:0 6px 6px 0;font-size:.8rem;">%</span></div>
+            </div>
+            <div class="form-group">
+              <label>Enquadramento Legal do IPI</label>
+              <input type="text" name="ipi_enquadramento" class="form-control" value="">
+            </div>
+          </div>
+        </div>
+
+        <div class="trib-section">
+          <h4>PIS</h4>
+          <div class="form-grid" style="grid-template-columns:2fr 1fr;">
+            <div class="form-group">
+              <label>Código de situação tributária</label>
+              <select name="pis_cst" class="form-control">
+                {% for op in ['01 - Operação Tributável (base de cálculo = valor da operação alíquota normal)','07 - Operação Isenta da Contribuição','08 - Operação sem Incidência da Contribuição'] %}
+                <option {% if (p.pis_cst or '01') == op[:2] %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Alíquota do PIS</label>
+              <div style="display:flex;"><input type="number" name="pis_aliquota" class="form-control" style="border-radius:6px 0 0 6px;" min="0" step="0.01" value="{{ p.pis_aliquota or '' }}"><span style="padding:9px 10px;background:#F8F9FA;border:1.5px solid var(--borda);border-left:none;border-radius:0 6px 6px 0;font-size:.8rem;">%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="trib-section">
+          <h4>COFINS</h4>
+          <div class="form-grid" style="grid-template-columns:2fr 1fr;">
+            <div class="form-group">
+              <label>Código de situação tributária</label>
+              <select name="cofins_cst" class="form-control">
+                {% for op in ['01 - Operação Tributável (base de cálculo = valor da operação alíquota normal)','07 - Operação Isenta da Contribuição','08 - Operação sem Incidência da Contribuição'] %}
+                <option {% if (p.cofins_cst or '01') == op[:2] %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Alíquota do COFINS</label>
+              <div style="display:flex;"><input type="number" name="cofins_aliquota" class="form-control" style="border-radius:6px 0 0 6px;" min="0" step="0.01" value="{{ p.cofins_aliquota or '' }}"><span style="padding:9px 10px;background:#F8F9FA;border:1.5px solid var(--borda);border-left:none;border-radius:0 6px 6px 0;font-size:.8rem;">%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ─── TABS ────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('ativa'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('ativa'));
+    btn.classList.add('ativa');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('ativa');
+    lucide.createIcons();
+  });
+});
+
+// ─── TIPO PREÇO ──────────────────────────────────────────────────────────
+function marcarTipo(input) {
+  document.querySelectorAll('.tipo-preco-card').forEach(c => c.classList.remove('selecionado'));
+  input.closest('.tipo-preco-card').classList.add('selecionado');
+}
+
+// ─── LINHAS DE PREÇO ─────────────────────────────────────────────────────
+function addPrecoLinha() {
+  const div = document.createElement('div');
+  div.className = 'preco-row preco-linha';
+  div.innerHTML = `
+    <input type="number" class="form-control pc-qtd" min="1" placeholder="">
+    <input type="number" class="form-control pc-ant" min="0" step="0.01" placeholder="">
+    <input type="number" class="form-control pc-venda" min="0" step="0.01" placeholder="">
+    <input type="number" class="form-control pc-custo" min="0" step="0.01" placeholder="">
+    <input type="number" class="form-control pc-peso" min="0" step="0.001" placeholder="">
+    <input type="number" class="form-control pc-larg" min="0" step="0.1" placeholder="">
+    <input type="number" class="form-control pc-alt" min="0" step="0.1" placeholder="">
+    <input type="number" class="form-control pc-comp" min="0" step="0.1" placeholder="">
+    <div style="display:flex;align-items:center;justify-content:center;">
+      <button type="button" class="btn btn-ghost btn-sm btn-rm-preco"><i data-lucide="x"></i></button>
+    </div>`;
+  div.querySelector('.btn-rm-preco').addEventListener('click', () => { div.remove(); });
+  document.getElementById('preco-lista').appendChild(div);
+  lucide.createIcons();
+}
+
+document.getElementById('btn-add-preco').addEventListener('click', addPrecoLinha);
+document.querySelectorAll('.btn-rm-preco').forEach(b => b.addEventListener('click', () => b.closest('.preco-linha').remove()));
+
+// ─── LINHAS DE VARIAÇÃO ──────────────────────────────────────────────────
+function addVarLinha() {
+  const div = document.createElement('div');
+  div.className = 'var-row var-linha';
+  div.innerHTML = `
+    <input type="text" class="form-control var-tipo" placeholder="Ex: Tamanho">
+    <input type="text" class="form-control var-nome" placeholder="Ex: P, M, G, GG">
+    <input type="number" class="form-control var-preco" min="0" step="0.01" placeholder="0,00">
+    <input type="number" class="form-control var-custo" min="0" step="0.01" placeholder="0,00">
+    <select class="form-control var-cobranca" style="border-radius:0;">
+      <option>Unidade</option><option>Metro</option><option>Quilograma</option><option>Litro</option>
+    </select>
+    <div style="display:flex;align-items:center;justify-content:center;">
+      <button type="button" class="btn btn-ghost btn-sm btn-rm-var" style="color:var(--perigo)"><i data-lucide="trash-2"></i></button>
+    </div>`;
+  div.querySelector('.btn-rm-var').addEventListener('click', () => { div.remove(); });
+  document.getElementById('var-lista').appendChild(div);
+  lucide.createIcons();
+}
+
+document.getElementById('btn-add-var').addEventListener('click', addVarLinha);
+document.querySelectorAll('.btn-rm-var').forEach(b => b.addEventListener('click', () => b.closest('.var-linha').remove()));
+
+// ─── PREVIEW IMAGEM ──────────────────────────────────────────────────────
+function previewImg(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const prev = document.getElementById('img-preview');
+      prev.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+// ─── SERIALIZAR ANTES DE SALVAR ──────────────────────────────────────────
+document.getElementById('form-produto').addEventListener('submit', function() {
+  const precos = [];
+  document.querySelectorAll('.preco-linha').forEach(l => {
+    precos.push({
+      quantidade: l.querySelector('.pc-qtd').value,
+      preco_anterior: l.querySelector('.pc-ant').value,
+      preco_venda: l.querySelector('.pc-venda').value,
+      preco_custo: l.querySelector('.pc-custo').value,
+      peso: l.querySelector('.pc-peso').value,
+      largura: l.querySelector('.pc-larg').value,
+      altura: l.querySelector('.pc-alt').value,
+      comprimento: l.querySelector('.pc-comp').value,
+    });
+  });
+  document.getElementById('precos_json').value = JSON.stringify(precos);
+
+  const vars = [];
+  document.querySelectorAll('.var-linha').forEach(l => {
+    vars.push({
+      variacao_tipo: l.querySelector('.var-tipo').value,
+      nome: l.querySelector('.var-nome').value,
+      preco_venda: l.querySelector('.var-preco').value,
+      custo: l.querySelector('.var-custo').value,
+      forma_cobranca: l.querySelector('.var-cobranca').value,
+    });
+  });
+  document.getElementById('variacoes_json').value = JSON.stringify(vars);
+});
+
+if (!document.querySelector('.preco-linha')) addPrecoLinha();
+</script>
+{% endblock %}

@@ -1,0 +1,326 @@
+{% extends 'base.html' %}
+{% block titulo %}{{ 'Editar Pedido #' ~ pedido.id if pedido else 'Novo Pedido' }}{% endblock %}
+{% block topbar_titulo %}{{ 'Editar Pedido #' ~ pedido.id if pedido else 'Novo Pedido' }}{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('pedidos') }}" class="btn btn-secundario">
+    <i data-lucide="arrow-left"></i> Voltar
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<form method="post" id="form-pedido">
+  <input type="hidden" name="itens_json" id="itens_json">
+
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+
+    <!-- COLUNA ESQUERDA -->
+    <div>
+      <div class="card mb-16">
+        <div class="card-header"><h3>Dados do Pedido</h3></div>
+        <div class="card-body">
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label>Cliente</label>
+              <select name="cliente_id" class="form-control" id="select-cliente">
+                <option value="">— Selecione —</option>
+                {% for c in clientes %}
+                <option value="{{ c.id }}" {% if pedido and pedido.cliente_id == c.id %}selected{% endif %}>{{ c.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Prazo de Entrega</label>
+              <input type="date" name="prazo" class="form-control" value="{{ pedido.prazo if pedido else '' }}">
+            </div>
+          </div>
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label>Forma de Pagamento</label>
+              <select name="forma_pagamento" class="form-control">
+                <option value="">— Selecione —</option>
+                {% for op in ['Dinheiro','PIX','Cartão Débito','Cartão Crédito','Boleto','A prazo'] %}
+                <option {% if pedido and pedido.forma_pagamento == op %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% if pedido %}
+            <div class="form-group">
+              <label>Status</label>
+              <select name="status" class="form-control">
+                {% for s in ['aguardando','producao','pronto','entregue','cancelado'] %}
+                <option value="{{ s }}" {% if pedido.status == s %}selected{% endif %}>{{ s|title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label>Observações</label>
+            <textarea name="observacoes" class="form-control" rows="2" placeholder="Detalhes do pedido, instruções especiais...">{{ pedido.observacoes if pedido else '' }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- ITENS -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Itens do Pedido</h3>
+        </div>
+        <div class="itens-pedido" id="itens-container">
+          <div class="item-pedido-row item-header">
+            <span>Produto / Descrição</span>
+            <span>Qtd</span>
+            <span>Preço Unit.</span>
+            <span>Subtotal</span>
+            <span></span>
+          </div>
+          <div id="itens-lista">
+            {% if pedido and pedido.itens %}
+              {% for item in pedido.itens %}
+              <div class="item-pedido-row item-linha">
+                <input type="text" class="form-control item-desc" placeholder="Descrição do item" value="{{ item.descricao or (item.produto_nome or '') }}" data-produto-id="{{ item.produto_id or '' }}">
+                <input type="number" class="form-control item-qtd" value="{{ item.quantidade }}" min="0.01" step="0.01">
+                <input type="number" class="form-control item-preco" value="{{ item.preco_unitario }}" min="0" step="0.01" placeholder="0,00">
+                <input type="text" class="form-control item-subtotal" readonly value="{{ "%.2f"|format(item.subtotal) }}">
+                <button type="button" class="btn btn-ghost btn-sm btn-remover-item"><i data-lucide="x"></i></button>
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <button type="button" class="add-item-btn" id="btn-add-item">
+            <i data-lucide="plus"></i> Adicionar item
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLUNA DIREITA -->
+    <div>
+      <div class="card">
+        <div class="card-header"><h3>Resumo</h3></div>
+        <div class="card-body">
+          <div style="margin-bottom:16px;">
+            <div class="d-flex justify-between mb-8">
+              <span class="text-muted">Subtotal</span>
+              <span class="fw-600" id="resumo-subtotal">R$ 0,00</span>
+            </div>
+            <div class="form-group">
+              <label>Desconto (R$)</label>
+              <input type="number" name="desconto" id="input-desconto" class="form-control" min="0" step="0.01" value="{{ pedido.desconto if pedido else '0' }}" placeholder="0,00">
+            </div>
+            <div class="d-flex justify-between" style="padding-top:12px;border-top:1px solid var(--borda);">
+              <span class="fw-600">Total</span>
+              <span class="fw-700 text-primaria" id="resumo-total" style="font-size:1.1rem;">R$ 0,00</span>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primario w-full btn-lg">
+            <i data-lucide="save"></i>
+            {{ 'Salvar Alterações' if pedido else 'Criar Pedido' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Busca de produtos com modal de preços -->
+      <div class="card mt-16">
+        <div class="card-header"><h3>Catálogo de Produtos</h3></div>
+        <div class="card-body" style="padding:12px;">
+          <div class="busca-wrapper mb-8" style="max-width:100%">
+            <i data-lucide="search"></i>
+            <input type="text" id="busca-produto" class="form-control" placeholder="Buscar produto...">
+          </div>
+          <div id="lista-produtos" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+            {% for p in produtos %}
+            <div class="produto-item" data-id="{{ p.id }}" data-nome="{{ p.nome }}" data-preco="{{ p.preco }}"
+                 style="padding:8px 10px;border-radius:6px;cursor:pointer;font-size:.82rem;border:1px solid var(--borda);">
+              <div class="fw-600">{{ p.nome }}</div>
+              <div class="text-muted" style="font-size:.78rem">R$ {{ "%.2f"|format(p.preco) }} · {{ p.unidade or 'UN' }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<!-- Modal de preços do produto -->
+<div id="modal-preco" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3 id="modal-produto-nome">Selecionar quantidade e preço</h3>
+      <button type="button" class="modal-fechar" id="modal-fechar">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-corpo"></div>
+    <div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--borda);display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn btn-secundario" id="modal-cancelar">Cancelar</button>
+      <button type="button" class="btn btn-primario" id="modal-confirmar"><i data-lucide="plus"></i> Adicionar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let produtoSelecionado = null;
+
+function recalcular() {
+  let subtotal = 0;
+  document.querySelectorAll('.item-linha').forEach(l => {
+    const qtd = parseFloat(l.querySelector('.item-qtd').value) || 0;
+    const preco = parseFloat(l.querySelector('.item-preco').value) || 0;
+    const sub = qtd * preco;
+    l.querySelector('.item-subtotal').value = sub.toFixed(2);
+    subtotal += sub;
+  });
+  const desconto = parseFloat(document.getElementById('input-desconto').value) || 0;
+  document.getElementById('resumo-subtotal').textContent = 'R$ ' + subtotal.toFixed(2).replace('.', ',');
+  document.getElementById('resumo-total').textContent = 'R$ ' + (subtotal - desconto).toFixed(2).replace('.', ',');
+}
+
+function addLinha(desc='', qtd=1, preco=0, produtoId='') {
+  const div = document.createElement('div');
+  div.className = 'item-pedido-row item-linha';
+  div.innerHTML = `
+    <input type="text" class="form-control item-desc" placeholder="Descrição do item" value="${desc}" data-produto-id="${produtoId}">
+    <input type="number" class="form-control item-qtd" value="${qtd}" min="0.01" step="0.01">
+    <input type="number" class="form-control item-preco" value="${preco}" min="0" step="0.01" placeholder="0,00">
+    <input type="text" class="form-control item-subtotal" readonly value="${(qtd*preco).toFixed(2)}">
+    <button type="button" class="btn btn-ghost btn-sm btn-remover-item"><i data-lucide="x"></i></button>
+  `;
+  div.querySelector('.item-qtd').addEventListener('input', recalcular);
+  div.querySelector('.item-preco').addEventListener('input', recalcular);
+  div.querySelector('.btn-remover-item').addEventListener('click', () => { div.remove(); recalcular(); lucide.createIcons(); });
+  document.getElementById('itens-lista').appendChild(div);
+  lucide.createIcons();
+  recalcular();
+}
+
+document.getElementById('btn-add-item').addEventListener('click', () => addLinha());
+document.querySelectorAll('.item-linha').forEach(l => {
+  l.querySelector('.item-qtd').addEventListener('input', recalcular);
+  l.querySelector('.item-preco').addEventListener('input', recalcular);
+  l.querySelector('.btn-remover-item').addEventListener('click', () => { l.remove(); recalcular(); });
+});
+document.getElementById('input-desconto').addEventListener('input', recalcular);
+
+// Busca
+document.getElementById('busca-produto').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('.produto-item').forEach(el => {
+    el.style.display = el.dataset.nome.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+
+// Clique no produto → abre modal com tabela de preços
+document.querySelectorAll('.produto-item').forEach(el => {
+  el.addEventListener('click', () => abrirModalPreco(el.dataset.id, el.dataset.nome));
+  el.addEventListener('mouseenter', () => el.style.background = 'var(--fundo)');
+  el.addEventListener('mouseleave', () => el.style.background = '');
+});
+
+function abrirModalPreco(id, nome) {
+  document.getElementById('modal-produto-nome').textContent = nome;
+  document.getElementById('modal-corpo').innerHTML = '<p style="padding:20px;text-align:center;color:#888">Carregando...</p>';
+  document.getElementById('modal-preco').style.display = 'flex';
+  produtoSelecionado = { id, nome };
+
+  fetch(`/produtos/${id}/precos`)
+    .then(r => r.json())
+    .then(p => {
+      let html = '';
+      if (p.precos && p.precos.length > 0) {
+        html += `<div style="margin-bottom:16px;">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:8px">Tabela de Preços</p>
+          <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <thead><tr style="background:var(--fundo)">
+              <th style="padding:6px 10px;text-align:left;font-weight:600">Qtd</th>
+              <th style="padding:6px 10px;text-align:right;font-weight:600">Preço Unit.</th>
+              <th style="padding:6px 10px;text-align:right;font-weight:600">Total</th>
+              <th style="padding:6px 10px"></th>
+            </tr></thead><tbody>`;
+        p.precos.forEach(pc => {
+          html += `<tr style="border-bottom:1px solid var(--borda)">
+            <td style="padding:8px 10px;font-weight:600">${pc.quantidade}</td>
+            <td style="padding:8px 10px;text-align:right">R$ ${parseFloat(pc.preco_venda).toFixed(2)}</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--primaria)">R$ ${(pc.quantidade * pc.preco_venda).toFixed(2)}</td>
+            <td style="padding:8px 10px"><button type="button" style="padding:4px 12px;background:var(--primaria);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer" onclick="selecionarPrecoPronto(${pc.quantidade},${pc.preco_venda})">Usar</button></td>
+          </tr>`;
+        });
+        html += '</tbody></table></div>';
+      }
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <div>
+          <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Quantidade</label>
+          <input type="number" id="modal-qtd" class="form-control" value="${p.precos && p.precos[0] ? p.precos[0].quantidade : 1}" min="1" step="1">
+        </div>
+        <div>
+          <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Preço Unitário (R$)</label>
+          <input type="number" id="modal-preco-unit" class="form-control" value="${p.precos && p.precos[0] ? p.precos[0].preco_venda : p.preco || 0}" step="0.01" min="0">
+        </div>
+      </div>`;
+      if (p.variacoes && p.variacoes.length > 0) {
+        html += `<div style="margin-top:12px;">
+          <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Variação</label>
+          <select id="modal-variacao" class="form-control">
+            <option value="">Sem variação</option>`;
+        p.variacoes.forEach(v => {
+          html += `<option value="${v.nome}${v.preco_venda > 0 ? ' (+R$'+parseFloat(v.preco_venda).toFixed(2)+')' : ''}">${v.variacao_tipo}: ${v.nome}${v.preco_venda > 0 ? ' (+R$'+parseFloat(v.preco_venda).toFixed(2)+')' : ''}</option>`;
+        });
+        html += '</select></div>';
+      }
+      document.getElementById('modal-corpo').innerHTML = html;
+      lucide.createIcons();
+    })
+    .catch(() => {
+      document.getElementById('modal-corpo').innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 0">
+          <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Quantidade</label>
+          <input type="number" id="modal-qtd" class="form-control" value="1" min="1"></div>
+          <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Preço Unitário (R$)</label>
+          <input type="number" id="modal-preco-unit" class="form-control" value="0" step="0.01"></div>
+        </div>`;
+    });
+}
+
+function selecionarPrecoPronto(qtd, preco) {
+  document.getElementById('modal-qtd').value = qtd;
+  document.getElementById('modal-preco-unit').value = preco;
+}
+
+document.getElementById('modal-confirmar').addEventListener('click', () => {
+  if (!produtoSelecionado) return;
+  const qtd = parseFloat(document.getElementById('modal-qtd').value) || 1;
+  const preco = parseFloat(document.getElementById('modal-preco-unit').value) || 0;
+  const varSel = document.getElementById('modal-variacao');
+  const varTxt = varSel ? varSel.value : '';
+  const desc = produtoSelecionado.nome + (varTxt ? ' — ' + varTxt : '');
+  addLinha(desc, qtd, preco, produtoSelecionado.id);
+  fecharModal();
+});
+
+function fecharModal() {
+  document.getElementById('modal-preco').style.display = 'none';
+  produtoSelecionado = null;
+}
+document.getElementById('modal-fechar').addEventListener('click', fecharModal);
+document.getElementById('modal-cancelar').addEventListener('click', fecharModal);
+document.getElementById('modal-preco').addEventListener('click', e => { if (e.target === e.currentTarget) fecharModal(); });
+
+// Submit
+document.getElementById('form-pedido').addEventListener('submit', function() {
+  const dados = [];
+  document.querySelectorAll('.item-linha').forEach(l => {
+    dados.push({
+      produto_id: l.querySelector('.item-desc').dataset.produtoId || '',
+      descricao: l.querySelector('.item-desc').value,
+      quantidade: l.querySelector('.item-qtd').value,
+      preco_unitario: l.querySelector('.item-preco').value,
+      subtotal: l.querySelector('.item-subtotal').value,
+    });
+  });
+  document.getElementById('itens_json').value = JSON.stringify(dados);
+});
+
+recalcular();
+</script>
+{% endblock %}

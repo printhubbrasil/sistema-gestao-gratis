@@ -1,0 +1,418 @@
+{% extends 'base.html' %}
+{% block titulo %}Cálculo — {{ calculo.nome or 'Sem nome' }}{% endblock %}
+{% block topbar_titulo %}Cálculo — {{ calculo.nome or 'Sem nome' }}{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('prec_ficha_salvo', id=calculo.id) }}" target="_blank" class="btn btn-secundario">
+    <i data-lucide="printer"></i> Imprimir Ficha
+  </a>
+  <button class="btn btn-secundario" onclick="criarOrcamento()">
+    <i data-lucide="file-plus"></i> Criar Orçamento
+  </button>
+  <a href="{{ url_for('prec_calcular') }}" class="btn btn-primario"><i data-lucide="plus"></i> Novo Cálculo</a>
+  <a href="{{ url_for('precificacao') }}" class="btn btn-secundario"><i data-lucide="arrow-left"></i> Voltar</a>
+{% endblock %}
+
+{% block conteudo %}
+<style>
+.det-row td {
+  background: rgba(0,0,0,.025);
+  font-size: .76rem;
+  color: var(--texto-muted);
+  padding: 4px 16px 7px 28px;
+  border-bottom: 1px solid var(--borda);
+  line-height: 1.6;
+}
+.det-row strong { color: var(--texto); }
+</style>
+{% if not calculo %}
+<div class="card" style="text-align:center;padding:60px 20px;">
+  <h3>Cálculo não encontrado.</h3>
+  <a href="{{ url_for('precificacao') }}" class="btn btn-primario" style="margin-top:16px;">Voltar ao histórico</a>
+</div>
+{% else %}
+{% set d = calculo.dados %}
+{% set custo = calculo.custo_total or 0 %}
+{% set venda = calculo.preco_venda or 0 %}
+{% set qtd = calculo.quantidade or 0 %}
+{% set margem = ((venda - custo) / venda * 100) if venda > 0 else 0 %}
+
+<!-- Resumo em cards -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+  <div class="card" style="text-align:center;padding:14px 10px;">
+    <div style="font-size:1.2rem;font-weight:800;">R$ {{ "%.2f"|format(custo) }}</div>
+    <div class="text-muted" style="font-size:.72rem;margin-top:4px;">Custo Total</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px 10px;border:1.5px solid var(--primaria);background:rgba(233,69,96,.05);">
+    <div style="font-size:1.2rem;font-weight:800;color:var(--primaria);">R$ {{ "%.2f"|format(venda) }}</div>
+    <div class="text-muted" style="font-size:.72rem;margin-top:4px;">Preço de Venda</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px 10px;">
+    <div style="font-size:1.2rem;font-weight:800;">{% if qtd %}R$ {{ "%.2f"|format(venda / qtd) }}{% else %}—{% endif %}</div>
+    <div class="text-muted" style="font-size:.72rem;margin-top:4px;">Preço/Unidade</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px 10px;">
+    <div style="font-size:1.2rem;font-weight:800;color:var(--texto-muted);">{% if qtd %}R$ {{ "%.4f"|format(custo / qtd) }}{% else %}—{% endif %}</div>
+    <div class="text-muted" style="font-size:.72rem;margin-top:4px;">Custo/Unidade</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px 10px;">
+    <div style="font-size:1.2rem;font-weight:800;color:var(--sucesso);">{{ "%.1f"|format(margem) }}%</div>
+    <div class="text-muted" style="font-size:.72rem;margin-top:4px;">Margem de Lucro</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px 10px;">
+    <div style="font-size:1.2rem;font-weight:800;">× {{ "%.1f"|format(calculo.markup or 1) }}</div>
+    <div class="text-muted" style="font-size:.72rem;margin-top:4px;">Markup</div>
+  </div>
+</div>
+
+<!-- Infos do produto -->
+<div class="card mb-16" style="padding:14px 20px;">
+  <div style="display:flex;flex-wrap:wrap;gap:20px;font-size:.85rem;">
+    <span><span class="text-muted">Produto:</span> <strong>{{ calculo.nome or '—' }}</strong></span>
+    <span><span class="text-muted">Tipo:</span> <strong>{{ d.tipo_produto or '—' }}</strong></span>
+    {% if d.papel_nome %}<span><span class="text-muted">Papel:</span> <strong>{{ d.papel_nome }}</strong></span>{% endif %}
+    {% if d.formato_nome %}<span><span class="text-muted">Formato:</span> <strong>{{ d.formato_nome }}</strong></span>{% endif %}
+    {% if d.maquina_nome %}<span><span class="text-muted">Máquina:</span> <strong>{{ d.maquina_nome }}</strong></span>{% endif %}
+    {% if d.folhas_total %}<span><span class="text-muted">Folhas:</span> <strong>{{ d.folhas_total }}</strong></span>{% endif %}
+    {% if d.clicks_total %}<span><span class="text-muted">Clicks:</span> <strong>{{ d.clicks_total }}</strong></span>{% endif %}
+    <span><span class="text-muted">Data:</span> <strong>{{ calculo.created_at[:10] }}</strong></span>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;">
+
+  <!-- Breakdown detalhado -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Breakdown de Custos</h3>
+      <span class="text-muted text-sm">{{ calculo.quantidade or 0 }} unidades</span>
+    </div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Resumo</th>
+            <th class="text-right" style="min-width:100px;">Custo</th>
+            <th style="width:120px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ct = [calculo.custo_total or 1, 0.01] | max %}
+
+          {# ── PAPEL IMPRESSO ─────────────────────────────── #}
+          {% if calculo.tipo_produto == 'papel' %}
+          {% set det = d.det or {} %}
+
+          {% set cp = d.custo_papel or 0 %}
+          <tr>
+            <td><span class="fw-600">📄 Papel</span><br><span class="text-muted text-sm">{{ d.papel_nome or '—' }}{% if d.formato_nome %} · {{ d.formato_nome }}{% endif %}</span></td>
+            <td class="text-muted text-sm">{{ det.folhas_total or d.folhas_total or '?' }} folhas totais</td>
+            <td class="text-right fw-600">R$ {{ "%.2f"|format(cp) }}</td>
+            <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#3B82F6;border-radius:3px;width:{{ [(cp/ct*100)|int, 100]|min }}%"></div></div></td>
+          </tr>
+          {% if det %}
+          <tr class="det-row">
+            <td colspan="4">
+              📐 <strong>Imposição:</strong> {{ det.pecas_por_folha or '?' }} peças/folha
+              · {{ det.folhas_liq or '?' }} folhas líquidas + {{ det.perda_pct or 0 }}% perda
+              = <strong>{{ det.folhas_total or '?' }} folhas</strong>
+              &nbsp;·&nbsp; {{ det.fpr or '?' }} formatos/resma
+              &nbsp;·&nbsp; R$&nbsp;<strong>{{ "%.4f"|format(det.custo_folha or 0) }}</strong>/folha
+              &nbsp;→&nbsp; <strong>R$ {{ "%.2f"|format(cp) }}</strong>
+            </td>
+          </tr>
+          {% endif %}
+
+          {% set ci = d.custo_impressao or 0 %}
+          <tr>
+            <td><span class="fw-600">🖨️ Impressão</span><br><span class="text-muted text-sm">{{ d.maquina_nome or '—' }}</span></td>
+            <td class="text-muted text-sm">
+              {% if det.maquina_tipo == 'click' %}{{ det.clicks_total or d.clicks_total or '?' }} clicks
+              {% elif det.maquina_tipo == 'm2' %}{{ "%.2f"|format(det.area_bruta or 0) }} m²
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-right fw-600">R$ {{ "%.2f"|format(ci) }}</td>
+            <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#8B5CF6;border-radius:3px;width:{{ [(ci/ct*100)|int, 100]|min }}%"></div></div></td>
+          </tr>
+          {% if det %}
+          <tr class="det-row">
+            <td colspan="4">
+              {% if det.maquina_tipo == 'click' %}
+              🖨️ <strong>Click:</strong>
+              {{ det.folhas_total or '?' }} folhas
+              × {{ det.clicks_por_folha or '?' }} clicks/folha
+              × R$&nbsp;<strong>{{ "%.4f"|format(det.custo_click or 0) }}</strong>/click
+              = <strong>R$ {{ "%.2f"|format(ci) }}</strong>
+              ({{ det.lados or 1 }} lado{{ 's' if (det.lados or 1) > 1 else '' }}, boca {{ det.boca_cm or '?' }}cm)
+              {% elif det.maquina_tipo == 'm2' %}
+              🖨️ <strong>m²:</strong>
+              {{ d.larg or '?' }}×{{ d.alt or '?' }}cm · {{ calculo.quantidade }} un + {{ det.perda_pct or 0 }}% perda
+              = <strong>{{ "%.3f"|format(det.area_bruta or 0) }} m²</strong>
+              × R$&nbsp;<strong>{{ "%.2f"|format(det.custo_m2_maq or 0) }}</strong>/m²
+              = <strong>R$ {{ "%.2f"|format(ci) }}</strong>
+              {% endif %}
+            </td>
+          </tr>
+          {% endif %}
+
+          {# ── LIVRO ──────────────────────────────────────── #}
+          {% elif calculo.tipo_produto == 'livro' %}
+          {% if d.componentes_livro %}
+            {% for comp in d.componentes_livro %}
+            {% set det = comp.det or {} %}
+
+            {% if comp.tipo == 'capa_dura' %}
+              {% set cc = comp.custo_capa_dura or 0 %}
+              <tr>
+                <td><span class="fw-600">📦 {{ comp.nome or 'Capa Dura' }}</span><br><span class="text-muted text-sm">{{ comp.papelao_nome or '—' }}{% if comp.tamanho_nome %} · {{ comp.tamanho_nome }}{% endif %}</span></td>
+                <td class="text-muted text-sm">{% if det.folhas_papelao %}{{ det.folhas_papelao }} folhas de papelão{% else %}papelão{% endif %}</td>
+                <td class="text-right fw-600">R$ {{ "%.2f"|format(cc) }}</td>
+                <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#F59E0B;border-radius:3px;width:{{ [(cc/ct*100)|int, 100]|min }}%"></div></div></td>
+              </tr>
+              {% if det %}
+              <tr class="det-row">
+                <td colspan="4">
+                  📦 <strong>Papelão:</strong>
+                  {% if det.papelao_larg %}Folha: {{ det.papelao_larg }}×{{ det.papelao_alt }}cm · {% endif %}
+                  {% if det.tamanho_larg %}Capa: {{ det.tamanho_larg }}×{{ det.tamanho_alt }}cm · {% endif %}
+                  <strong>{{ det.pecas_por_folha or '?' }}</strong> peças/folha ·
+                  {{ det.total_pecas or '?' }} peças totais ({{ det.pecas_por_ex or 2 }}/ex × {{ calculo.quantidade }} un)
+                  → <strong>{{ det.folhas_papelao or '?' }} folhas</strong>
+                  × R$&nbsp;<strong>{{ "%.2f"|format(det.custo_folha_papelao or 0) }}</strong>/folha
+                  = <strong>R$ {{ "%.2f"|format(cc) }}</strong>
+                </td>
+              </tr>
+              {% endif %}
+
+            {% else %}
+              {% set cp_c = comp.custo_papel or 0 %}
+              {% set ci_c = comp.custo_impressao or 0 %}
+              {% set cl_c = comp.custo_laminacao or 0 %}
+              {% set cc_tot = cp_c + ci_c + cl_c %}
+              <tr>
+                <td><span class="fw-600">📖 {{ comp.nome or 'Componente' }}</span><br><span class="text-muted text-sm">{{ comp.papel_nome or '—' }}{% if comp.formato_nome %} · {{ comp.formato_nome }}{% endif %}{% if comp.maquina_nome %} · {{ comp.maquina_nome }}{% endif %}</span></td>
+                <td class="text-muted text-sm">
+                  {% if comp.paginas %}{{ comp.paginas }} págs ({{ comp.folhas_por_exemplar or '?' }} f/ex){% else %}{{ comp.folhas_por_exemplar or 1 }} f/ex{% endif %}
+                  · {{ '4×4' if comp.lados == 2 else '4×0' }}
+                </td>
+                <td class="text-right fw-600">R$ {{ "%.2f"|format(cc_tot) }}</td>
+                <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#3B82F6;border-radius:3px;width:{{ [(cc_tot/ct*100)|int, 100]|min }}%"></div></div></td>
+              </tr>
+              {% if det %}
+              <tr class="det-row">
+                <td colspan="4">
+                  📄 <strong>Papel:</strong>
+                  {{ det.folhas_por_exemplar or comp.folhas_por_exemplar or '?' }} f/ex × {{ calculo.quantidade }} un + {{ det.perda_pct or 0 }}% perda
+                  = <strong>{{ det.folhas_total or '?' }} folhas</strong>
+                  · {{ det.fpr or '?' }} formatos/resma
+                  · R$&nbsp;<strong>{{ "%.4f"|format(det.custo_folha or 0) }}</strong>/folha
+                  = R$ {{ "%.2f"|format(cp_c) }}
+                </td>
+              </tr>
+              <tr class="det-row">
+                <td colspan="4">
+                  {% if det.maquina_tipo == 'click' %}
+                  🖨️ <strong>Click:</strong>
+                  {{ det.folhas_total or '?' }} folhas
+                  × {{ det.clicks_por_folha or '?' }} clicks/folha
+                  × R$&nbsp;<strong>{{ "%.4f"|format(det.custo_click or 0) }}</strong>/click
+                  = <strong>R$ {{ "%.2f"|format(ci_c) }}</strong>
+                  ({{ det.lados or 1 }} lado{{ 's' if (det.lados or 1) > 1 else '' }}, boca {{ det.boca_cm or '?' }}cm)
+                  {% elif det.maquina_tipo == 'm2' %}
+                  🖨️ <strong>m²:</strong>
+                  {{ "%.3f"|format(det.area_m2 or 0) }} m²
+                  × R$&nbsp;<strong>{{ "%.2f"|format(det.custo_m2_maq or 0) }}</strong>/m²
+                  = <strong>R$ {{ "%.2f"|format(ci_c) }}</strong>
+                  {% else %}
+                  🖨️ Impressão: R$ {{ "%.2f"|format(ci_c) }}
+                  {% endif %}
+                  {% if cl_c > 0 %}
+                  &nbsp;&nbsp;|&nbsp;&nbsp;
+                  🎞️ <strong>Laminação ({{ det.lam_lados or 1 }}L):</strong>
+                  {{ "%.4f"|format(det.lam_metros_por_folha or 0) }} m/f
+                  × {{ det.folhas_total or '?' }} folhas
+                  × R$&nbsp;<strong>{{ "%.4f"|format(det.lam_custo_por_metro or 0) }}</strong>/m
+                  × ×{{ "%.1f"|format(det.lam_markup or 1) }}
+                  = <strong>R$ {{ "%.2f"|format(cl_c) }}</strong>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endif %}
+            {% endif %}
+            {% endfor %}
+          {% else %}
+          <tr>
+            <td><span class="fw-600">📖 Livro/Apostila</span></td>
+            <td class="text-muted text-sm">Impressão</td>
+            <td class="text-right fw-600">R$ {{ "%.2f"|format(d.custo_impressao or 0) }}</td>
+            <td></td>
+          </tr>
+          {% endif %}
+
+          {% if d.custo_wireo and d.custo_wireo > 0 %}
+          {% set cw = d.custo_wireo %}
+          {% set wd = d.wireo_det or {} %}
+          <tr>
+            <td><span class="fw-600">🔩 Wire-O / Espiral</span></td>
+            <td class="text-muted text-sm">{{ calculo.quantidade }} produtos</td>
+            <td class="text-right fw-600">R$ {{ "%.2f"|format(cw) }}</td>
+            <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#6366F1;border-radius:3px;width:{{ [(cw/ct*100)|int, 100]|min }}%"></div></div></td>
+          </tr>
+          {% if wd %}
+          <tr class="det-row">
+            <td colspan="4">
+              🔩 R$&nbsp;<strong>{{ "%.4f"|format(wd.custo_anel or 0) }}</strong>/anel
+              × <strong>{{ wd.aneis_produto or '?' }}</strong> anéis/produto
+              × {{ calculo.quantidade }} un
+              × ×<strong>{{ "%.1f"|format(wd.markup or 1) }}</strong> markup
+              = <strong>R$ {{ "%.2f"|format(cw) }}</strong>
+            </td>
+          </tr>
+          {% endif %}
+          {% endif %}
+
+          {# ── M² (outros tipos) ──────────────────────────── #}
+          {% else %}
+          {% set det = d.det or {} %}
+          {% set ci = d.custo_impressao or 0 %}
+          <tr>
+            <td><span class="fw-600">🖨️ Impressão UV/Eco</span><br><span class="text-muted text-sm">{{ d.maquina_nome or '—' }}</span></td>
+            <td class="text-muted text-sm">{{ "%.2f"|format(det.area_bruta or 0) }} m²</td>
+            <td class="text-right fw-600">R$ {{ "%.2f"|format(ci) }}</td>
+            <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#8B5CF6;border-radius:3px;width:{{ [(ci/ct*100)|int, 100]|min }}%"></div></div></td>
+          </tr>
+          {% if det %}
+          <tr class="det-row">
+            <td colspan="4">
+              🖨️ <strong>m²:</strong>
+              {{ d.larg or '?' }}×{{ d.alt or '?' }}cm · {{ calculo.quantidade }} un + {{ det.perda_pct or 0 }}% perda
+              = <strong>{{ "%.3f"|format(det.area_bruta or 0) }} m²</strong>
+              × R$&nbsp;<strong>{{ "%.2f"|format(det.custo_m2_maq or 0) }}</strong>/m²
+              = <strong>R$ {{ "%.2f"|format(ci) }}</strong>
+            </td>
+          </tr>
+          {% endif %}
+          {% endif %}
+
+          {# ── ACABAMENTOS ────────────────────────────────── #}
+          {% if d.acabamentos_nomes %}
+            {% for id, nome in d.acabamentos_nomes.items() %}
+            {% set ca = (d.custo_acabamentos or {})[id] or 0 %}
+            <tr>
+              <td><span class="fw-600">✂️ {{ nome }}</span></td>
+              <td class="text-muted text-sm">Acabamento</td>
+              <td class="text-right fw-600">R$ {{ "%.2f"|format(ca) }}</td>
+              <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#F59E0B;border-radius:3px;width:{{ [(ca/ct*100)|int, 100]|min }}%"></div></div></td>
+            </tr>
+            {% endfor %}
+          {% endif %}
+
+          {# ── SETUP + MO + TOTAIS ────────────────────────── #}
+          {% set cs = d.setup or 0 %}
+          <tr>
+            <td><span class="fw-600">⚙️ Setup / Arranque</span></td>
+            <td class="text-muted text-sm">Preparação e acerto de máquina</td>
+            <td class="text-right fw-600">R$ {{ "%.2f"|format(cs) }}</td>
+            <td><div style="height:6px;background:var(--borda);border-radius:3px;"><div style="height:6px;background:#10B981;border-radius:3px;width:{{ [(cs/ct*100)|int, 100]|min }}%"></div></div></td>
+          </tr>
+          <tr>
+            <td><span class="fw-600">👷 Mão de Obra</span></td>
+            <td class="text-muted text-sm">{{ d.mo_min or 0 }} minutos de produção</td>
+            <td class="text-right fw-600" id="td-mo">—</td>
+            <td><div style="height:6px;background:var(--borda);border-radius:3px;" id="td-mo-bar"></div></td>
+          </tr>
+
+          <tr style="font-weight:700;background:var(--fundo);">
+            <td colspan="3"><strong>Custo Total</strong> <strong class="text-right" style="float:right;">R$ {{ "%.2f"|format(custo) }}</strong></td>
+            <td></td>
+          </tr>
+          <tr style="font-weight:800;background:rgba(233,69,96,.06);color:var(--primaria);">
+            <td colspan="3"><strong>Preço de Venda (× {{ "%.1f"|format(calculo.markup or 1) }})</strong> <strong style="float:right;">R$ {{ "%.2f"|format(venda) }}</strong></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tabela de quantidades -->
+  <div class="card" style="padding:0;">
+    <div class="card-header"><h3 style="font-size:.9rem;">Tabela de Quantidades</h3></div>
+    <div class="card-body" style="padding:12px 16px;">
+      {% set base_qtd = calculo.quantidade or 0 %}
+      {% if base_qtd > 0 %}
+        {% set faixas = [
+          (base_qtd * 0.25) | int,
+          (base_qtd * 0.5)  | int,
+          base_qtd,
+          (base_qtd * 2)    | int,
+          (base_qtd * 5)    | int,
+        ] %}
+        {% set custo_var = (calculo.custo_total or 0) - (d.setup or 0) %}
+        {% set setup_val = d.setup or 0 %}
+        {% for q in faixas %}
+          {% if q > 0 %}
+            {% set ratio = q / base_qtd %}
+            {% set custo_q = custo_var * ratio + setup_val %}
+            {% set venda_q = custo_q * (calculo.markup or 1) %}
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--borda);{% if q == base_qtd %}background:rgba(233,69,96,.05);margin:0 -16px;padding-left:16px;padding-right:16px;{% endif %}">
+              <span style="font-weight:{% if q == base_qtd %}700{% else %}400{% endif %};{% if q == base_qtd %}color:var(--primaria);{% endif %}">{{ q }}</span>
+              <div style="text-align:right;">
+                <div style="font-weight:600;{% if q == base_qtd %}color:var(--primaria);{% endif %}">R$ {{ "%.2f"|format(venda_q) }}</div>
+                <div class="text-muted" style="font-size:.72rem;">R$ {{ "%.2f"|format(venda_q / q) }}/un</div>
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p class="text-muted">Quantidade não informada.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- /grid -->
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if calculo %}
+<script>
+(function() {
+  const d = {{ calculo.dados | tojson }};
+  const custoTotal = {{ calculo.custo_total or 0 }};
+  const custoPapel = d.custo_papel || 0;
+  const custoImp   = d.custo_impressao || 0;
+  const setup      = d.setup || 0;
+  const acab       = d.custo_acabamentos || {};
+  const totalAcab  = Object.values(acab).reduce((s, v) => s + (v || 0), 0);
+  const wireo      = d.custo_wireo || 0;
+  // Para livro: somar laminação e capa_dura dos componentes (não estão em custo_papel/custo_impressao)
+  let extrasLivro = 0;
+  if (d.componentes_livro) {
+    d.componentes_livro.forEach(c => {
+      extrasLivro += (c.custo_laminacao || 0) + (c.custo_capa_dura || 0);
+    });
+  }
+  const mo = Math.max(0, custoTotal - custoPapel - custoImp - setup - totalAcab - wireo - extrasLivro);
+  const elMo = document.getElementById('td-mo');
+  if (elMo) elMo.textContent = 'R$ ' + mo.toFixed(2);
+  const elBar = document.getElementById('td-mo-bar');
+  if (elBar && custoTotal > 0) {
+    const pct = Math.min(mo / custoTotal * 100, 100).toFixed(0);
+    elBar.innerHTML = `<div style="height:6px;background:#E94560;border-radius:3px;width:${pct}%"></div>`;
+  }
+})();
+
+function criarOrcamento() {
+  const d = {{ calculo.dados | tojson }};
+  const dados = {
+    nome: '{{ calculo.nome or "" }}',
+    quantidade: {{ calculo.quantidade or 0 }},
+    preco_venda: {{ calculo.preco_venda or 0 }},
+  };
+  sessionStorage.setItem('calc_para_orcamento', JSON.stringify(dados));
+  window.location.href = '/orcamentos/novo?from_calc=1';
+}
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,554 @@
+{% extends 'base.html' %}
+{% block titulo %}Central de Custos{% endblock %}
+{% block topbar_titulo %}Central de Custos{% endblock %}
+{% block topbar_acoes %}
+  <button class="btn btn-primario" onclick="abrirModal('modal-nova-despesa')">
+    <i data-lucide="plus"></i> Nova Despesa
+  </button>
+{% endblock %}
+
+{% block conteudo %}
+<style>
+  .custos-tabs { display:flex; gap:0; border-bottom:2px solid var(--borda); margin-bottom:24px; }
+  .custo-tab { padding:10px 20px; font-weight:600; font-size:.88rem; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--texto-muted); transition:all .15s; }
+  .custo-tab.ativo { color:var(--primaria); border-bottom-color:var(--primaria); }
+  .tab-painel { display:none; }
+  .tab-painel.ativo { display:block; }
+
+  .filtro-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+  .filtro-bar select, .filtro-bar input { height:36px; padding:0 10px; border:1px solid var(--borda); border-radius:8px; background:var(--card-bg); color:var(--texto); font-size:.85rem; }
+  .filtro-bar .btn { height:36px; }
+
+  .stats-custos { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:20px; }
+  .stat-custo { background:var(--card-bg); border:1px solid var(--borda); border-radius:12px; padding:16px 18px; }
+  .stat-custo .label { font-size:.73rem; color:var(--texto-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .stat-custo .valor { font-size:1.5rem; font-weight:800; font-family:monospace; }
+  .stat-custo.vermelho .valor { color:var(--perigo,#e94560); }
+  .stat-custo.laranja .valor  { color:#f59e0b; }
+  .stat-custo.azul .valor     { color:var(--primaria); }
+
+  .cat-bar-wrap { margin-bottom:6px; }
+  .cat-bar-label { display:flex; justify-content:space-between; font-size:.8rem; margin-bottom:3px; }
+  .cat-bar-label .nome { color:var(--texto-muted); }
+  .cat-bar-label .val  { font-weight:700; font-family:monospace; color:var(--texto); }
+  .cat-bar-track { height:8px; background:var(--borda); border-radius:4px; overflow:hidden; }
+  .cat-bar-fill  { height:100%; background:var(--primaria); border-radius:4px; transition:width .4s; }
+
+  .despesa-table th, .despesa-table td { vertical-align:middle; }
+  .badge-forma { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.72rem; font-weight:600; background:rgba(var(--primaria-rgb,.5,.5,.5),.1); color:var(--texto-muted); border:1px solid var(--borda); }
+  .recorrente-badge { display:inline-block; padding:1px 7px; border-radius:20px; font-size:.7rem; font-weight:600; background:rgba(245,158,11,.12); color:#f59e0b; border:1px solid rgba(245,158,11,.3); }
+
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.aberto { display:flex; }
+  .modal-box { background:var(--card-bg); border-radius:16px; padding:28px; width:100%; max-width:540px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal-titulo { font-size:1.1rem; font-weight:700; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; }
+  .modal-close { cursor:pointer; color:var(--texto-muted); background:none; border:none; font-size:1.3rem; line-height:1; }
+  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  .form-group { display:flex; flex-direction:column; gap:5px; }
+  .form-group label { font-size:.78rem; font-weight:600; color:var(--texto-muted); }
+  .form-group input, .form-group select, .form-group textarea { padding:9px 12px; border:1px solid var(--borda); border-radius:8px; background:var(--fundo); color:var(--texto); font-size:.88rem; }
+  .form-group textarea { resize:vertical; min-height:60px; }
+  .form-group.span2 { grid-column:span 2; }
+  .form-group.span3 { grid-column:span 3; }
+  .checkbox-row { display:flex; align-items:center; gap:8px; font-size:.85rem; }
+  .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+
+  /* Custos Fixos */
+  .fixo-item { display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:8px; border:1px solid var(--borda); background:var(--card-bg); margin-bottom:6px; }
+  .fixo-nome { flex:1; font-weight:600; font-size:.88rem; }
+  .fixo-cat  { font-size:.74rem; color:var(--texto-muted); }
+  .fixo-valor { font-family:monospace; font-weight:700; color:var(--primaria); min-width:110px; text-align:right; }
+  .fixo-acoes { display:flex; gap:4px; }
+  .fixo-cat-titulo { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--texto-muted); padding:10px 0 6px; border-bottom:1px solid var(--borda); margin-bottom:6px; }
+</style>
+
+<!-- Tabs -->
+<div class="custos-tabs">
+  <div class="custo-tab ativo" onclick="trocarTab('despesas')">Despesas</div>
+  <div class="custo-tab" onclick="trocarTab('fixos')">Custos Fixos Mensais</div>
+</div>
+
+<!-- ── TAB: DESPESAS ──────────────────────────────────────────────────────── -->
+<div id="tab-despesas" class="tab-painel ativo">
+
+  <!-- Filtros -->
+  <form method="GET" action="{{ url_for('custos') }}" class="filtro-bar">
+    <select name="mes" onchange="this.form.submit()">
+      {% for m in range(1,13) %}
+      <option value="{{ m }}" {% if m==mes %}selected{% endif %}>
+        {{ ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][m-1] }}
+      </option>
+      {% endfor %}
+    </select>
+    <select name="ano" onchange="this.form.submit()">
+      {% for a in range(2024, 2030) %}
+      <option value="{{ a }}" {% if a==ano %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+    <select name="cat" onchange="this.form.submit()">
+      <option value="">Todas categorias</option>
+      {% for k, v in categorias.items() %}
+      <option value="{{ k }}" {% if k==cat %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </form>
+
+  <!-- Stats -->
+  <div class="stats-custos">
+    <div class="stat-custo vermelho">
+      <div class="label">Total do Mês</div>
+      <div class="valor">R$ {{ "%.2f"|format(resumo.total_mes) }}</div>
+    </div>
+    <div class="stat-custo laranja">
+      <div class="label">Total do Ano</div>
+      <div class="valor">R$ {{ "%.2f"|format(resumo.total_ano) }}</div>
+    </div>
+    <div class="stat-custo azul">
+      <div class="label">Lançamentos</div>
+      <div class="valor">{{ despesas|length }}</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 280px;gap:20px;align-items:start;">
+
+    <!-- Tabela -->
+    <div class="card">
+      <div class="card-header">
+        <h3>Despesas — {{ ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mes-1] }}/{{ ano }}</h3>
+      </div>
+      <div class="table-container">
+        {% if despesas %}
+        <table class="despesa-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Descrição</th>
+              <th>Categoria</th>
+              <th>Forma</th>
+              <th class="text-right">Valor</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in despesas %}
+            <tr>
+              <td class="text-muted" style="white-space:nowrap">{{ d.data[8:10] }}/{{ d.data[5:7] }}/{{ d.data[:4] }}</td>
+              <td>
+                {{ d.descricao }}
+                {% if d.recorrente %}<span class="recorrente-badge">recorrente</span>{% endif %}
+                {% if d.observacao %}<br><small class="text-muted">{{ d.observacao }}</small>{% endif %}
+              </td>
+              <td class="text-muted">{{ categorias.get(d.categoria, d.categoria) }}</td>
+              <td><span class="badge-forma">{{ formas.get(d.forma_pagamento, d.forma_pagamento) }}</span></td>
+              <td class="text-right fw-600 text-perigo" style="font-family:monospace;white-space:nowrap">
+                - R$ {{ "%.2f"|format(d.valor) }}
+              </td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-sm btn-outline" onclick="editarDespesa({{ d|tojson }})">
+                  <i data-lucide="pencil" style="width:13px;height:13px"></i>
+                </button>
+                <form method="POST" action="{{ url_for('excluir_despesa', id=d.id) }}" style="display:inline" onsubmit="return confirm('Remover esta despesa?')">
+                  <input type="hidden" name="mes_filtro" value="{{ mes }}">
+                  <input type="hidden" name="ano_filtro" value="{{ ano }}">
+                  <button class="btn btn-sm btn-perigo">
+                    <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" class="text-right fw-600">Total:</td>
+              <td class="text-right fw-700 text-perigo" style="font-family:monospace">
+                - R$ {{ "%.2f"|format(resumo.total_mes) }}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        {% else %}
+        <div class="vazio">
+          <i data-lucide="receipt"></i>
+          <p>Nenhuma despesa em {{ ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mes-1] }}/{{ ano }}.</p>
+          <button class="btn btn-primario mt-8" onclick="abrirModal('modal-nova-despesa')">
+            <i data-lucide="plus"></i> Registrar primeira despesa
+          </button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Sidebar: por categoria -->
+    <div>
+      <div class="card">
+        <div class="card-header"><h3>Por Categoria</h3></div>
+        <div class="card-body">
+          {% if resumo.por_categoria %}
+            {% set max_val = resumo.por_categoria[0].total %}
+            {% for pc in resumo.por_categoria %}
+            <div class="cat-bar-wrap">
+              <div class="cat-bar-label">
+                <span class="nome">{{ categorias.get(pc.categoria, pc.categoria) }}</span>
+                <span class="val">R$ {{ "%.2f"|format(pc.total) }}</span>
+              </div>
+              <div class="cat-bar-track">
+                <div class="cat-bar-fill" style="width:{{ (pc.total/max_val*100)|int }}%"></div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted" style="font-size:.85rem;text-align:center;padding:20px 0">Sem dados para exibir</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TAB: CUSTOS FIXOS ─────────────────────────────────────────────────── -->
+<div id="tab-fixos" class="tab-painel">
+  <div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;">
+    <div class="card">
+      <div class="card-header">
+        <h3>Custos Fixos Mensais</h3>
+        <button class="btn btn-primario btn-sm" onclick="abrirModal('modal-novo-fixo')">
+          <i data-lucide="plus"></i> Adicionar
+        </button>
+      </div>
+      <div class="card-body" style="padding-top:8px">
+        {% set cats_usadas = custos_fixos|map(attribute='categoria')|unique|list %}
+        {% for cat_key, cat_nome in pec_categorias.items() %}
+          {% set itens = custos_fixos|selectattr('categoria','equalto',cat_key)|list %}
+          {% if itens %}
+          <div class="fixo-cat-titulo">{{ cat_nome }}</div>
+          {% for c in itens %}
+          <div class="fixo-item">
+            <div style="flex:1">
+              <div class="fixo-nome">{{ c.nome }}</div>
+              {% if c.observacao %}<div class="fixo-cat">{{ c.observacao }}</div>{% endif %}
+            </div>
+            <div class="fixo-valor">R$ {{ "%.2f"|format(c.valor) }}/mês</div>
+            <div class="fixo-acoes">
+              <button class="btn btn-sm btn-outline" onclick="editarFixo({{ c|tojson }})">
+                <i data-lucide="pencil" style="width:13px;height:13px"></i>
+              </button>
+              <form method="POST" action="{{ url_for('pec_excluir_custo', id=c.id) }}" style="display:inline" onsubmit="return confirm('Remover custo fixo?')">
+                <input type="hidden" name="_from_custos" value="1">
+                <button class="btn btn-sm btn-perigo">
+                  <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+          {% endif %}
+        {% endfor %}
+        {% if not custos_fixos %}
+        <div class="vazio">
+          <i data-lucide="layers"></i>
+          <p>Nenhum custo fixo cadastrado.</p>
+          <button class="btn btn-primario mt-8" onclick="abrirModal('modal-novo-fixo')">Adicionar</button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Resumo fixos -->
+    <div>
+      <div class="card">
+        <div class="card-header"><h3>Resumo Mensal</h3></div>
+        <div class="card-body">
+          {% set max_fixo = (custos_fixos|map(attribute='valor')|list|max) if custos_fixos else 1 %}
+          {% for cat_key, cat_nome in pec_categorias.items() %}
+            {% set total_cat = custos_fixos|selectattr('categoria','equalto',cat_key)|sum(attribute='valor') %}
+            {% if total_cat > 0 %}
+            <div class="cat-bar-wrap">
+              <div class="cat-bar-label">
+                <span class="nome">{{ cat_nome }}</span>
+                <span class="val">R$ {{ "%.2f"|format(total_cat) }}</span>
+              </div>
+              <div class="cat-bar-track">
+                <div class="cat-bar-fill" style="width:{{ (total_cat/total_fixos*100)|int if total_fixos else 0 }}%"></div>
+              </div>
+            </div>
+            {% endif %}
+          {% endfor %}
+          <hr style="margin:14px 0;border-color:var(--borda)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:600;font-size:.9rem">Total Fixo/mês</span>
+            <span style="font-family:monospace;font-weight:800;font-size:1.1rem;color:var(--perigo,#e94560)">
+              R$ {{ "%.2f"|format(total_fixos) }}
+            </span>
+          </div>
+          <p class="text-muted" style="font-size:.75rem;margin-top:8px">
+            Esses valores alimentam o cálculo de Ponto de Equilíbrio.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Nova Despesa ────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-nova-despesa">
+  <div class="modal-box">
+    <div class="modal-titulo">
+      Nova Despesa
+      <button class="modal-close" onclick="fecharModal('modal-nova-despesa')">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('nova_despesa') }}">
+      <input type="hidden" name="mes_filtro" value="{{ mes }}">
+      <input type="hidden" name="ano_filtro" value="{{ ano }}">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Data *</label>
+          <input type="date" name="data" id="nova-data" required>
+        </div>
+        <div class="form-group">
+          <label>Valor *</label>
+          <input type="number" name="valor" step="0.01" min="0" placeholder="0,00" required>
+        </div>
+        <div class="form-group span2">
+          <label>Descrição *</label>
+          <input type="text" name="descricao" placeholder="Ex: Abastecimento — posto Shell" required>
+        </div>
+        <div class="form-group">
+          <label>Categoria</label>
+          <select name="categoria">
+            {% for k, v in categorias.items() %}
+            <option value="{{ k }}">{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Forma de Pagamento</label>
+          <select name="forma_pagamento">
+            {% for k, v in formas.items() %}
+            <option value="{{ k }}">{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label>Observação</label>
+          <textarea name="observacao" placeholder="Detalhes opcionais..."></textarea>
+        </div>
+        <div class="form-group span2">
+          <label class="checkbox-row">
+            <input type="checkbox" name="recorrente">
+            Despesa recorrente (mensal)
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="fecharModal('modal-nova-despesa')">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar Despesa</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── MODAL: Editar Despesa ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-editar-despesa">
+  <div class="modal-box">
+    <div class="modal-titulo">
+      Editar Despesa
+      <button class="modal-close" onclick="fecharModal('modal-editar-despesa')">✕</button>
+    </div>
+    <form method="POST" id="form-editar-despesa">
+      <input type="hidden" name="mes_filtro" value="{{ mes }}">
+      <input type="hidden" name="ano_filtro" value="{{ ano }}">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Data *</label>
+          <input type="date" name="data" id="ed-data" required>
+        </div>
+        <div class="form-group">
+          <label>Valor *</label>
+          <input type="number" name="valor" id="ed-valor" step="0.01" min="0" required>
+        </div>
+        <div class="form-group span2">
+          <label>Descrição *</label>
+          <input type="text" name="descricao" id="ed-descricao" required>
+        </div>
+        <div class="form-group">
+          <label>Categoria</label>
+          <select name="categoria" id="ed-categoria">
+            {% for k, v in categorias.items() %}
+            <option value="{{ k }}">{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Forma de Pagamento</label>
+          <select name="forma_pagamento" id="ed-forma">
+            {% for k, v in formas.items() %}
+            <option value="{{ k }}">{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label>Observação</label>
+          <textarea name="observacao" id="ed-observacao"></textarea>
+        </div>
+        <div class="form-group span2">
+          <label class="checkbox-row">
+            <input type="checkbox" name="recorrente" id="ed-recorrente">
+            Despesa recorrente (mensal)
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="fecharModal('modal-editar-despesa')">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar Alterações</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── MODAL: Novo Custo Fixo ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-novo-fixo">
+  <div class="modal-box">
+    <div class="modal-titulo">
+      Novo Custo Fixo
+      <button class="modal-close" onclick="fecharModal('modal-novo-fixo')">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('pec_novo_custo') }}">
+      <input type="hidden" name="_from_custos" value="1">
+      <div class="form-grid-2">
+        <div class="form-group span2">
+          <label>Nome *</label>
+          <input type="text" name="nome" placeholder="Ex: Aluguel do Galpão" required>
+        </div>
+        <div class="form-group">
+          <label>Categoria</label>
+          <select name="categoria">
+            {% for k, v in pec_categorias.items() %}
+            <option value="{{ k }}">{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Valor Mensal *</label>
+          <input type="number" name="valor" step="0.01" min="0" placeholder="0,00" required>
+        </div>
+        <div class="form-group span2">
+          <label>Observação</label>
+          <input type="text" name="observacao" placeholder="Opcional">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="fecharModal('modal-novo-fixo')">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── MODAL: Editar Custo Fixo ───────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-editar-fixo">
+  <div class="modal-box">
+    <div class="modal-titulo">
+      Editar Custo Fixo
+      <button class="modal-close" onclick="fecharModal('modal-editar-fixo')">✕</button>
+    </div>
+    <form method="POST" id="form-editar-fixo">
+      <input type="hidden" name="_from_custos" value="1">
+      <div class="form-grid-2">
+        <div class="form-group span2">
+          <label>Nome *</label>
+          <input type="text" name="nome" id="fixo-nome" required>
+        </div>
+        <div class="form-group">
+          <label>Categoria</label>
+          <select name="categoria" id="fixo-cat">
+            {% for k, v in pec_categorias.items() %}
+            <option value="{{ k }}">{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Valor Mensal *</label>
+          <input type="number" name="valor" id="fixo-valor" step="0.01" min="0" required>
+        </div>
+        <div class="form-group span2">
+          <label>Observação</label>
+          <input type="text" name="observacao" id="fixo-obs">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="fecharModal('modal-editar-fixo')">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar Alterações</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EDITAR_BASE = '{{ url_for("editar_despesa", id=0) }}';
+const EDITAR_FIXO_BASE = '{{ url_for("pec_editar_custo", id=0) }}';
+
+function abrirModal(id) {
+  document.getElementById(id).classList.add('aberto');
+}
+function fecharModal(id) {
+  document.getElementById(id).classList.remove('aberto');
+}
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('aberto'); });
+});
+
+// Preenche data de hoje no modal de nova despesa
+document.getElementById('modal-nova-despesa').addEventListener('click', function(){}, {once:false});
+(function() {
+  const hoje = new Date().toISOString().split('T')[0];
+  document.getElementById('nova-data').value = hoje;
+})();
+
+function editarDespesa(d) {
+  document.getElementById('ed-data').value = d.data;
+  document.getElementById('ed-valor').value = d.valor;
+  document.getElementById('ed-descricao').value = d.descricao;
+  document.getElementById('ed-categoria').value = d.categoria;
+  document.getElementById('ed-forma').value = d.forma_pagamento;
+  document.getElementById('ed-observacao').value = d.observacao || '';
+  document.getElementById('ed-recorrente').checked = !!d.recorrente;
+  document.getElementById('form-editar-despesa').action = EDITAR_BASE.replace('/0/', '/' + d.id + '/');
+  abrirModal('modal-editar-despesa');
+}
+
+function editarFixo(c) {
+  document.getElementById('fixo-nome').value = c.nome;
+  document.getElementById('fixo-cat').value = c.categoria;
+  document.getElementById('fixo-valor').value = c.valor;
+  document.getElementById('fixo-obs').value = c.observacao || '';
+  document.getElementById('form-editar-fixo').action = EDITAR_FIXO_BASE.replace('/0/', '/' + c.id + '/');
+  abrirModal('modal-editar-fixo');
+}
+
+function trocarTab(tab) {
+  document.querySelectorAll('.custo-tab').forEach((t, i) => {
+    const nomes = ['despesas','fixos'];
+    t.classList.toggle('ativo', nomes[i] === tab);
+  });
+  document.querySelectorAll('.tab-painel').forEach(p => p.classList.remove('ativo'));
+  document.getElementById('tab-' + tab).classList.add('ativo');
+  if (tab === 'fixos') lucide.createIcons();
+}
+
+// Redirecionar pec_novo_custo e pec_editar_custo de volta para /custos com tab fixos
+document.querySelectorAll('form[action*="custo-fixo"]').forEach(f => {
+  f.addEventListener('submit', function() {
+    const redir = document.createElement('input');
+    redir.type = 'hidden'; redir.name = '_redirect_fixos'; redir.value = '1';
+    f.appendChild(redir);
+  });
+});
+</script>
+{% endblock %}

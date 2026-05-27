@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block titulo %}Orçamentos{% endblock %}
+{% block topbar_titulo %}Orçamentos{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('novo_orcamento') }}" class="btn btn-primario">
+    <i data-lucide="plus"></i> Novo Orçamento
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="filtros">
+  <form method="get" class="busca-wrapper">
+    <i data-lucide="search"></i>
+    <input type="text" name="q" class="form-control" placeholder="Buscar cliente ou número..." value="{{ busca or '' }}" oninput="this.form.submit()">
+  </form>
+  <div class="filtro-pills">
+    <a href="{{ url_for('orcamentos') }}" class="pill {% if not status %}ativo{% endif %}">Todos</a>
+    <a href="{{ url_for('orcamentos', status='rascunho') }}" class="pill {% if status=='rascunho' %}ativo{% endif %}">Rascunho</a>
+    <a href="{{ url_for('orcamentos', status='enviado') }}" class="pill {% if status=='enviado' %}ativo{% endif %}">Enviado</a>
+    <a href="{{ url_for('orcamentos', status='aprovado') }}" class="pill {% if status=='aprovado' %}ativo{% endif %}">Aprovado</a>
+    <a href="{{ url_for('orcamentos', status='recusado') }}" class="pill {% if status=='recusado' %}ativo{% endif %}">Recusado</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    {% if orcamentos %}
+    <table>
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Cliente</th>
+          <th>Validade</th>
+          <th>Status</th>
+          <th class="text-right">Total</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orcamentos %}
+        <tr>
+          <td>
+            <a href="{{ url_for('ver_orcamento', id=o.id) }}" class="fw-600" style="color:var(--primaria);text-decoration:none">
+              {{ o.numero }}
+            </a>
+            <div class="text-muted text-sm">{{ o.created_at[:10] }}</div>
+          </td>
+          <td>{{ o.cliente_nome or 'Sem cliente' }}</td>
+          <td class="text-muted">{{ o.validade or '—' }}</td>
+          <td>
+            <span class="badge badge-orc-{{ o.status }}">{{ o.status|title }}</span>
+          </td>
+          <td class="text-right fw-600">R$ {{ "%.2f"|format(o.total) }}</td>
+          <td>
+            <div class="d-flex gap-8">
+              <a href="{{ url_for('ver_orcamento', id=o.id) }}" class="btn btn-ghost btn-sm" title="Ver">
+                <i data-lucide="eye"></i>
+              </a>
+              <a href="{{ url_for('editar_orcamento', id=o.id) }}" class="btn btn-ghost btn-sm" title="Editar">
+                <i data-lucide="pencil"></i>
+              </a>
+              <form method="post" action="{{ url_for('excluir_orcamento', id=o.id) }}" onsubmit="return confirm('Excluir orçamento {{ o.numero }}?')">
+                <button type="submit" class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="file-plus"></i>
+      <p>Nenhum orçamento encontrado. <a href="{{ url_for('novo_orcamento') }}" style="color:var(--primaria)">Criar o primeiro</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

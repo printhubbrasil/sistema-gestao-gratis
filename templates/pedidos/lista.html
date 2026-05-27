@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block titulo %}Pedidos{% endblock %}
+{% block topbar_titulo %}Pedidos{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('novo_pedido') }}" class="btn btn-primario">
+    <i data-lucide="plus"></i> Novo Pedido
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="filtros">
+  <form method="get" class="busca-wrapper">
+    <i data-lucide="search"></i>
+    <input type="text" name="q" class="form-control" placeholder="Buscar por cliente ou #pedido..." value="{{ busca or '' }}" oninput="this.form.submit()">
+  </form>
+  <div class="filtro-pills">
+    <a href="{{ url_for('pedidos') }}" class="filtro-pill {% if not status %}ativo{% endif %}">Todos</a>
+    <a href="{{ url_for('pedidos', status='aguardando') }}" class="filtro-pill {% if status == 'aguardando' %}ativo{% endif %}">Aguardando</a>
+    <a href="{{ url_for('pedidos', status='producao') }}" class="filtro-pill {% if status == 'producao' %}ativo{% endif %}">Produção</a>
+    <a href="{{ url_for('pedidos', status='pronto') }}" class="filtro-pill {% if status == 'pronto' %}ativo{% endif %}">Pronto</a>
+    <a href="{{ url_for('pedidos', status='entregue') }}" class="filtro-pill {% if status == 'entregue' %}ativo{% endif %}">Entregue</a>
+    <a href="{{ url_for('pedidos', status='cancelado') }}" class="filtro-pill {% if status == 'cancelado' %}ativo{% endif %}">Cancelado</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    {% if pedidos %}
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Cliente</th>
+          <th>Prazo</th>
+          <th>Pagamento</th>
+          <th>Total</th>
+          <th>Status</th>
+          <th>Data</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pedidos %}
+        <tr>
+          <td class="fw-600">#{{ p.id }}</td>
+          <td>{{ p.cliente_nome or '—' }}</td>
+          <td class="text-muted">{{ p.prazo or '—' }}</td>
+          <td class="text-muted">{{ p.forma_pagamento or '—' }}</td>
+          <td class="fw-600">R$ {{ "%.2f"|format(p.total) }}</td>
+          <td>
+            <select class="badge badge-{{ p.status }}" style="border:none;cursor:pointer;font-weight:600;font-size:.75rem;border-radius:20px;padding:3px 10px;"
+                    onchange="atualizarStatus({{ p.id }}, this.value, this)">
+              <option value="aguardando" {% if p.status=='aguardando' %}selected{% endif %}>Aguardando</option>
+              <option value="producao" {% if p.status=='producao' %}selected{% endif %}>Produção</option>
+              <option value="pronto" {% if p.status=='pronto' %}selected{% endif %}>Pronto</option>
+              <option value="entregue" {% if p.status=='entregue' %}selected{% endif %}>Entregue</option>
+              <option value="cancelado" {% if p.status=='cancelado' %}selected{% endif %}>Cancelado</option>
+            </select>
+          </td>
+          <td class="text-muted">{{ p.created_at[:10] }}</td>
+          <td>
+            <div class="d-flex gap-8">
+              <a href="{{ url_for('editar_pedido', id=p.id) }}" class="btn btn-ghost btn-sm" title="Editar">
+                <i data-lucide="pencil"></i>
+              </a>
+              <form method="post" action="{{ url_for('excluir_pedido', id=p.id) }}" onsubmit="return confirm('Excluir pedido #{{ p.id }}?')">
+                <button type="submit" class="btn btn-ghost btn-sm" title="Excluir">
+                  <i data-lucide="trash-2"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="shopping-bag"></i>
+      <p>Nenhum pedido encontrado.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function atualizarStatus(id, status, el) {
+  el.className = 'badge badge-' + status;
+  el.style.cssText = 'border:none;cursor:pointer;font-weight:600;font-size:.75rem;border-radius:20px;padding:3px 10px;';
+  fetch(`/pedidos/${id}/status`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status})
+  });
+}
+</script>
+{% endblock %}

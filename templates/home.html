@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block titulo %}Dashboard{% endblock %}
+{% block topbar_titulo %}Dashboard{% endblock %}
+
+{% block conteudo %}
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icone vermelho"><i data-lucide="shopping-bag"></i></div>
+    <div class="stat-info">
+      <p>Pedidos Hoje</p>
+      <h2>{{ stats.pedidos_hoje }}</h2>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icone laranja"><i data-lucide="clock"></i></div>
+    <div class="stat-info">
+      <p>Em Aberto</p>
+      <h2>{{ stats.pedidos_abertos }}</h2>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icone verde"><i data-lucide="trending-up"></i></div>
+    <div class="stat-info">
+      <p>Vendas Hoje</p>
+      <h2>R$ {{ "%.2f"|format(stats.faturamento_hoje) }}</h2>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icone verde"><i data-lucide="dollar-sign"></i></div>
+    <div class="stat-info">
+      <p>Faturamento do Mês</p>
+      <h2>R$ {{ "%.2f"|format(stats.faturamento_mes) }}</h2>
+    </div>
+  </div>
+</div>
+
+<!-- WIDGET PONTO DE EQUILÍBRIO -->
+<div class="card pec-widget-card">
+  <div class="card-header">
+    <h3><i data-lucide="scale" style="width:16px;height:16px;vertical-align:-2px;margin-right:6px;color:var(--primaria)"></i>Ponto de Equilíbrio — Este Mês</h3>
+    <a href="{{ url_for('pec_index') }}" class="btn btn-ghost btn-sm">Ver detalhes →</a>
+  </div>
+
+  {% if pec.sem_config %}
+  <div class="vazio" style="padding:2rem 1rem">
+    <i data-lucide="scale"></i>
+    <p>Nenhum custo fixo cadastrado ainda.<br>
+    <a href="{{ url_for('pec_index') }}" style="color:var(--primaria)">Cadastrar custos fixos</a> para ver a análise.</p>
+  </div>
+  {% else %}
+
+  <div class="pec-widget-body">
+
+    <!-- Gauge SVG -->
+    <div class="pec-gauge-wrap">
+      <svg viewBox="0 0 200 110" class="pec-gauge-svg">
+        <!-- fundo arco -->
+        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round"/>
+        <!-- arco progresso -->
+        {% set circum = 251.2 %}
+        {% set dash = (pec.pct / 100) * 251.2 %}
+        <path id="pec-arco" d="M 20 100 A 80 80 0 0 1 180 100" fill="none"
+              stroke="{{ '#16a34a' if pec.atingido else ('#f59e0b' if pec.pct >= 70 else 'var(--primaria)') }}"
+              stroke-width="18" stroke-linecap="round"
+              stroke-dasharray="{{ dash | round(1) }} {{ circum }}"
+              pathLength="{{ circum }}"/>
+        <!-- texto central -->
+        <text x="100" y="90" text-anchor="middle" font-size="28" font-weight="700"
+              fill="{{ '#16a34a' if pec.atingido else '#1e293b' }}">{{ pec.pct }}%</text>
+        <text x="100" y="107" text-anchor="middle" font-size="11" fill="#64748b">
+          {{ 'ATINGIDO ✓' if pec.atingido else 'do mínimo' }}
+        </text>
+      </svg>
+      <div class="pec-gauge-label-min">0</div>
+      <div class="pec-gauge-label-max">100%</div>
+    </div>
+
+    <!-- Métricas -->
+    <div class="pec-metricas">
+      <div class="pec-metrica">
+        <span class="pec-metrica-label">Custos Fixos / mês</span>
+        <span class="pec-metrica-valor">R$ {{ "%.2f"|format(pec.total) }}</span>
+      </div>
+      <div class="pec-metrica">
+        <span class="pec-metrica-label">Faturamento Mínimo</span>
+        <span class="pec-metrica-valor destaque">R$ {{ "%.2f"|format(pec.fat_min) }}</span>
+      </div>
+      <div class="pec-metrica">
+        <span class="pec-metrica-label">Faturamento do Mês</span>
+        <span class="pec-metrica-valor {{ 'verde' if pec.atingido else '' }}">R$ {{ "%.2f"|format(pec.fat_mes) }}</span>
+      </div>
+      <div class="pec-metrica">
+        <span class="pec-metrica-label">Margem de Contribuição</span>
+        <span class="pec-metrica-valor">{{ "%.1f"|format(pec.mc_pct) }}%</span>
+      </div>
+
+      {% if not pec.atingido and pec.fat_min > 0 %}
+      <div class="pec-falta">
+        <i data-lucide="alert-triangle" style="width:14px;height:14px;flex-shrink:0"></i>
+        Faltam <strong>R$ {{ "%.2f"|format(pec.fat_min - pec.fat_mes) }}</strong> para cobrir os custos fixos
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>Últimos Pedidos</h3>
+    <a href="{{ url_for('novo_pedido') }}" class="btn btn-primario btn-sm">
+      <i data-lucide="plus"></i> Novo Pedido
+    </a>
+  </div>
+  <div class="table-container">
+    {% if stats.ultimos_pedidos %}
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Cliente</th>
+          <th>Total</th>
+          <th>Status</th>
+          <th>Data</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in stats.ultimos_pedidos %}
+        <tr>
+          <td class="fw-600">#{{ p.id }}</td>
+          <td>{{ p.cliente_nome or '—' }}</td>
+          <td class="fw-600">R$ {{ "%.2f"|format(p.total) }}</td>
+          <td>
+            <span class="badge badge-{{ p.status }}">{{ p.status|title }}</span>
+          </td>
+          <td class="text-muted">{{ p.created_at[:10] }}</td>
+          <td>
+            <a href="{{ url_for('editar_pedido', id=p.id) }}" class="btn btn-ghost btn-sm">
+              <i data-lucide="pencil"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="shopping-bag"></i>
+      <p>Nenhum pedido ainda. <a href="{{ url_for('novo_pedido') }}" style="color:var(--primaria)">Criar o primeiro</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

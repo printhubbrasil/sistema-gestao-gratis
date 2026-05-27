@@ -1,0 +1,1430 @@
+{% extends 'base.html' %}
+{% block titulo %}Configurações de Precificação{% endblock %}
+{% block topbar_titulo %}Configurações de Precificação{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('prec_calcular') }}" class="btn btn-primario">
+    <i data-lucide="calculator"></i> Ir para Calculadora
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<style>
+  .config-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+  .config-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 8px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: .72rem;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+    color: var(--texto-muted);
+    background: var(--card-bg);
+    border: 1.5px solid var(--borda);
+    border-radius: 12px;
+    flex: 1;
+    transition: all .15s;
+    user-select: none;
+  }
+  .config-tab .tab-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    transition: transform .15s;
+  }
+  .config-tab:hover {
+    border-color: var(--primaria);
+    color: var(--primaria);
+    background: rgba(233,69,96,.06);
+  }
+  .config-tab:hover .tab-icon { transform: scale(1.12); }
+  .config-tab.ativo {
+    color: var(--primaria);
+    background: rgba(233,69,96,.10);
+    border-color: var(--primaria);
+    box-shadow: 0 2px 10px rgba(233,69,96,.18);
+  }
+  .config-tab.ativo .tab-icon { transform: scale(1.1); }
+  .config-panel { display:none; }
+  .config-panel.ativo { display:block; }
+
+  .item-card { background:var(--card-bg); border:1px solid var(--borda); border-radius:10px; padding:16px; margin-bottom:12px; }
+  .item-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .item-card-titulo { font-weight:700; font-size:.95rem; }
+  .item-card-sub { font-size:.78rem; color:var(--texto-muted); margin-top:2px; }
+  .item-card-acoes { display:flex; gap:6px; }
+
+  .custo-tag { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; background:var(--fundo); border:1px solid var(--borda); border-radius:6px; font-size:.78rem; color:var(--texto-muted); }
+  .custo-tag strong { color:var(--texto); }
+
+  .add-form { background:#F8FAFC; border:2px dashed var(--borda); border-radius:10px; padding:20px; margin-top:16px; }
+  .add-form h4 { font-size:.85rem; text-transform:uppercase; letter-spacing:.5px; color:var(--texto-leve); margin-bottom:16px; }
+
+  .tipo-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.72rem; font-weight:700; text-transform:uppercase; }
+  .tipo-click { background:#1E3A5F; color:#60A5FA; }
+  .tipo-m2 { background:#1E3A28; color:#34D399; }
+  .tipo-job { background:#3A2A1E; color:#F59E0B; }
+  .tipo-unidade { background:#2A1E3A; color:#A78BFA; }
+  .tipo-bobina { background:#3A1E2A; color:#F472B6; }
+  .tipo-hora { background:#2A3A1E; color:#86EFAC; }
+  .tipo-wireo { background:#1E2A3A; color:#67E8F9; }
+</style>
+
+<!-- Tabs -->
+<div class="config-tabs">
+  <div class="config-tab ativo" onclick="trocarTab('papeis')">
+    <span class="tab-icon">📄</span>Papéis
+  </div>
+  <div class="config-tab" onclick="trocarTab('midias')">
+    <span class="tab-icon">🎞️</span>Mídias Bobina
+  </div>
+  <div class="config-tab" onclick="trocarTab('papelao')">
+    <span class="tab-icon">📦</span>Papelão
+  </div>
+  <div class="config-tab" onclick="trocarTab('maquinas')">
+    <span class="tab-icon">🖨️</span>Máquinas
+  </div>
+  <div class="config-tab" onclick="trocarTab('acabamentos')">
+    <span class="tab-icon">✂️</span>Acabamentos
+  </div>
+  <div class="config-tab" onclick="trocarTab('acabamentos-uv')">
+    <span class="tab-icon">🎨</span>Eco/UV Flexível
+  </div>
+  <div class="config-tab" onclick="trocarTab('acrilicos')">
+    <span class="tab-icon">🔷</span>Acrílico UV
+  </div>
+  <div class="config-tab" onclick="trocarTab('apostilas')">
+    <span class="tab-icon">📓</span>Apostilas
+  </div>
+  <div class="config-tab" onclick="trocarTab('geral')">
+    <span class="tab-icon">⚙️</span>Geral
+  </div>
+</div>
+
+<!-- ══════════ MÍDIAS EM BOBINA ══════════ -->
+<div class="config-panel" id="tab-midias">
+  <div class="d-flex justify-between align-center mb-16">
+    <div>
+      <h3>Mídias em Bobina</h3>
+      <p class="text-muted text-sm">Cadastre os substratos de bobina (vinil, lona, transparente, etc.) com custo por m². Na calculadora UV/Eco, o custo da mídia será somado ao custo de impressão da máquina.</p>
+    </div>
+  </div>
+
+  {% if midias_bobina %}
+    {% for m in midias_bobina %}
+    <div class="item-card">
+      <div class="item-card-header">
+        <div>
+          <div class="item-card-titulo">{{ m.nome }}</div>
+          <div class="item-card-sub">R$ {{ "%.2f"|format(m.custo_m2) }}/m²</div>
+        </div>
+        <div class="item-card-acoes">
+          <button class="btn btn-ghost btn-sm" onclick='editarMidiaBobina({{ m|tojson }})'><i data-lucide="pencil"></i></button>
+          <form method="post" action="{{ url_for('prec_excluir_midia_bobina', id=m.id) }}" onsubmit="return confirm('Excluir {{ m.nome }}?')">
+            <button class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="vazio" style="margin-bottom:16px;"><p>Nenhuma mídia cadastrada ainda.</p></div>
+  {% endif %}
+
+  <div class="add-form" id="form-midia-bobina">
+    <h4 id="titulo-form-midia">+ Nova Mídia em Bobina</h4>
+    <form method="post" action="{{ url_for('prec_nova_midia_bobina') }}" id="action-form-midia">
+      <input type="hidden" name="_midia_id" id="midia_id_hidden">
+      <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Nome da Mídia <span style="color:var(--primaria)">*</span></label>
+          <input type="text" name="nome" id="midia_nome" class="form-control" placeholder="Ex: Vinil Brilho, Lona Frontlit, Transparente..." required>
+        </div>
+        <div class="form-group">
+          <label>Custo por m² (R$)</label>
+          <input type="number" name="custo_m2" id="midia_custo_m2" class="form-control" step="0.01" placeholder="0,00">
+        </div>
+      </div>
+      <div class="d-flex gap-8">
+        <button type="submit" class="btn btn-primario" id="btn-salvar-midia"><i data-lucide="save"></i> Salvar Mídia</button>
+        <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoMidia()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════ PAPÉIS ══════════ -->
+<div class="config-panel ativo" id="tab-papeis">
+  <div class="d-flex justify-between align-center mb-16">
+    <div>
+      <h3>Papéis e Mídias</h3>
+      <p class="text-muted text-sm">Cadastre cada papel, lona ou substrato com o custo da resma/rolo/chapa.</p>
+    </div>
+  </div>
+
+  {% if papeis %}
+    {% for p in papeis %}
+    <div class="item-card">
+      <div class="item-card-header">
+        <div>
+          <div class="item-card-titulo">
+            {{ p.nome }}
+            {% if p.tamanho_fixo %}<span style="margin-left:6px;font-size:.72rem;font-weight:700;background:rgba(99,102,241,.15);color:#818CF8;padding:2px 7px;border-radius:10px;">FIXO</span>{% endif %}
+          </div>
+          <div class="item-card-sub">
+            {% if p.tamanho_fixo %}
+              Tamanho fixo: {{ p.largura }}×{{ p.altura }} cm &nbsp;·&nbsp;
+              {{ p.folhas_resma }} folhas/resma
+            {% else %}
+              Resma: {{ p.largura }}×{{ p.altura }} cm &nbsp;·&nbsp;
+              {{ p.folhas_resma }} folhas &nbsp;·&nbsp;
+              Perda: {{ p.fator_perda }}%
+            {% endif %}
+          </div>
+        </div>
+        <div class="item-card-acoes">
+          <div style="text-align:right;margin-right:12px;">
+            <div class="custo-tag">Resma: <strong>R$ {{ "%.2f"|format(p.custo_resma) }}</strong></div>
+            <div class="custo-tag" style="margin-top:4px;">
+              Por folha: <strong>R$ {{ "%.4f"|format(p.custo_resma / p.folhas_resma if p.folhas_resma else 0) }}</strong>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick='editarPapel({{ p|tojson }})'><i data-lucide="pencil"></i></button>
+          <form method="post" action="{{ url_for('prec_excluir_papel', id=p.id) }}" onsubmit="return confirm('Excluir {{ p.nome }}?')">
+            <button class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="vazio" style="margin-bottom:16px;"><p>Nenhum papel cadastrado ainda.</p></div>
+  {% endif %}
+
+  <!-- Form novo papel -->
+  <div class="add-form" id="form-papel">
+    <h4 id="titulo-form-papel">+ Novo Papel / Mídia</h4>
+    <form method="post" action="{{ url_for('prec_novo_papel') }}" id="action-form-papel">
+      <input type="hidden" name="_papel_id" id="papel_id_hidden">
+      <!-- Checkbox tamanho fixo -->
+      <div style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.88rem;font-weight:600;">
+          <input type="checkbox" name="tamanho_fixo" id="papel_fixo" onchange="togglePapelFixo()"
+                 style="width:18px;height:18px;accent-color:var(--primaria);">
+          Tamanho fixo — papel já comprado cortado no tamanho final
+        </label>
+        <small class="text-muted" style="display:block;margin-top:4px;margin-left:28px;">
+          Marque quando o papel é comprado já no tamanho da peça (ex: A4, A3). O sistema usará 1 folha por peça, sem imposição.
+        </small>
+      </div>
+      <div class="form-grid form-grid-3" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Nome do Papel <span style="color:var(--primaria)">*</span></label>
+          <input type="text" name="nome" id="papel_nome" class="form-control" placeholder="Ex: Couchê 115g" required>
+        </div>
+        <div class="form-group">
+          <label id="label-papel-larg">Largura da resma comprada (cm)</label>
+          <input type="number" name="largura" id="papel_largura" class="form-control" step="0.1" placeholder="66" required>
+        </div>
+        <div class="form-group">
+          <label id="label-papel-alt">Altura da resma comprada (cm)</label>
+          <input type="number" name="altura" id="papel_altura" class="form-control" step="0.1" placeholder="96" required>
+        </div>
+      </div>
+      <div class="form-grid form-grid-3">
+        <div class="form-group">
+          <label id="label-papel-folhas">Folhas por resma</label>
+          <input type="number" name="folhas_resma" id="papel_folhas" class="form-control" placeholder="500">
+        </div>
+        <div class="form-group">
+          <label id="label-papel-custo">Custo da resma (R$)</label>
+          <input type="number" name="custo_resma" id="papel_custo" class="form-control" step="0.01" placeholder="0,00">
+        </div>
+        <div class="form-group" id="campo-fator-perda">
+          <label>Fator de perda (%)</label>
+          <input type="number" name="fator_perda" id="papel_perda" class="form-control" step="0.5" placeholder="5">
+        </div>
+      </div>
+      <div class="d-flex gap-8 mt-16">
+        <button type="submit" class="btn btn-primario" id="btn-salvar-papel"><i data-lucide="save"></i> Salvar Papel</button>
+        <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoPapel()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════ PAPELÃO (CAPA DURA) ══════════ -->
+<div class="config-panel" id="tab-papelao">
+  <div class="d-flex justify-between align-center mb-16">
+    <div>
+      <h3>Papelão para Capa Dura</h3>
+      <p class="text-muted text-sm">Cadastre os tipos de papelão (paraná, duplex etc.) com dimensões e custo por folha. O sistema calculará a imposição automaticamente.</p>
+    </div>
+  </div>
+
+  {% if papelao %}
+    {% for p in papelao %}
+    <div class="item-card" style="padding-bottom:0;">
+      <div class="item-card-header">
+        <div>
+          <div class="item-card-titulo">{{ p.nome }}</div>
+          <div class="item-card-sub">Folha: {{ p.largura }}×{{ p.altura }} cm — R$ {{ "%.2f"|format(p.custo) }}/folha</div>
+        </div>
+        <div class="item-card-acoes">
+          <button class="btn btn-ghost btn-sm" onclick='editarPapelao({{ p | tojson }})'>
+            <i data-lucide="pencil"></i>
+          </button>
+          <form method="post" action="{{ url_for('prec_excluir_papelao', id=p.id) }}" onsubmit="return confirm('Remover?')">
+            <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--primaria)"><i data-lucide="trash-2"></i></button>
+          </form>
+        </div>
+      </div>
+      <!-- Tamanhos cadastrados -->
+      <div style="padding:10px 16px 14px;border-top:1px dashed var(--borda);">
+        <div style="font-size:.78rem;font-weight:700;color:var(--texto-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Tamanhos de Capa Cadastrados</div>
+        {% if p.tamanhos %}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+            {% for t in p.tamanhos %}
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--fundo);border:1px solid var(--borda);border-radius:20px;font-size:.82rem;">
+              <span><strong>{{ t.nome }}</strong> — {{ t.largura }}×{{ t.altura }}cm</span>
+              <form method="post" action="{{ url_for('prec_excluir_tamanho_papelao', id=t.id) }}" style="margin:0;">
+                <button type="submit" class="btn btn-ghost" style="padding:0 2px;height:auto;color:var(--primaria);" title="Remover">×</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted text-sm" style="margin-bottom:8px;">Nenhum tamanho cadastrado. Adicione os tamanhos que você usa com este papelão.</p>
+        {% endif %}
+        <!-- Form inline para novo tamanho -->
+        <form method="post" action="{{ url_for('prec_novo_tamanho_papelao') }}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <input type="hidden" name="papelao_id" value="{{ p.id }}">
+          <div class="form-group" style="margin:0;min-width:140px;">
+            <label style="font-size:.75rem;">Nome do tamanho</label>
+            <input type="text" name="nome" class="form-control" placeholder="Ex: Agenda A5, Capa A4…" required style="font-size:.82rem;padding:5px 8px;">
+          </div>
+          <div class="form-group" style="margin:0;max-width:90px;">
+            <label style="font-size:.75rem;">Largura (cm)</label>
+            <input type="number" name="largura" class="form-control" step="0.1" placeholder="21" required style="font-size:.82rem;padding:5px 8px;">
+          </div>
+          <div class="form-group" style="margin:0;max-width:90px;">
+            <label style="font-size:.75rem;">Altura (cm)</label>
+            <input type="number" name="altura" class="form-control" step="0.1" placeholder="15.5" required style="font-size:.82rem;padding:5px 8px;">
+          </div>
+          <button type="submit" class="btn btn-secundario" style="font-size:.8rem;padding:6px 12px;">
+            <i data-lucide="plus"></i> Adicionar
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="vazio"><p>Nenhum papelão cadastrado.</p></div>
+  {% endif %}
+
+  <!-- Form -->
+  <div class="add-form" id="form-papelao">
+    <h4 id="titulo-form-papelao">+ Novo Papelão / Paraná</h4>
+    <form method="post" id="action-form-papelao" action="{{ url_for('prec_novo_papelao') }}">
+      <input type="hidden" name="papelao_id_hidden" id="papelao_id_hidden">
+      <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Nome <span style="color:var(--primaria)">*</span></label>
+          <input type="text" name="nome" id="papelao_nome" class="form-control" placeholder="Ex: Paraná 2mm, Duplex 350g..." required>
+        </div>
+        <div class="form-group">
+          <label>Custo por folha (R$)</label>
+          <input type="number" name="custo" id="papelao_custo" class="form-control" step="0.01" placeholder="0,00">
+        </div>
+      </div>
+      <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Largura da folha (cm)</label>
+          <input type="number" name="largura" id="papelao_largura" class="form-control" step="0.1" placeholder="60" oninput="atualizarPreviewPapelao()">
+        </div>
+        <div class="form-group">
+          <label>Altura da folha (cm)</label>
+          <input type="number" name="altura" id="papelao_altura" class="form-control" step="0.1" placeholder="80" oninput="atualizarPreviewPapelao()">
+        </div>
+      </div>
+      <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);margin-bottom:12px;" id="preview-papelao">
+        Preencha as dimensões para ver exemplos de imposição.
+      </div>
+      <div class="d-flex gap-8">
+        <button type="submit" class="btn btn-primario" id="btn-salvar-papelao"><i data-lucide="save"></i> Salvar Papelão</button>
+        <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoPapelao()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════ MÁQUINAS ══════════ -->
+<div class="config-panel" id="tab-maquinas">
+  <div class="d-flex justify-between align-center mb-16">
+    <div>
+      <h3>Máquinas de Impressão</h3>
+      <p class="text-muted text-sm">Cadastre cada equipamento com seus custos operacionais.</p>
+    </div>
+  </div>
+
+  {% if maquinas %}
+    {% for m in maquinas %}
+    <div class="item-card">
+      <div class="item-card-header">
+        <div>
+          <div class="item-card-titulo">
+            {{ m.nome }}
+            <span class="tipo-badge tipo-{{ m.tipo }}" style="margin-left:8px;">{{ m.tipo }}</span>
+          </div>
+          <div class="item-card-sub">
+            {% if m.tipo == 'click' %}
+              Por click (Toner/Digital)
+              &nbsp;·&nbsp; <span style="color:#60A5FA;font-weight:600;">Aparece para: Papel · Encadernados</span>
+            {% elif m.tipo == 'bobina' %}
+              Boca: {{ m.boca_cm }}cm &nbsp;·&nbsp; Eco-Solvente / UV Rolo
+              &nbsp;·&nbsp; <span style="color:#34D399;font-weight:600;">Aparece para: Mídia Flexível</span>
+            {% else %}
+              UV Plano / Chapa — por m²
+              &nbsp;·&nbsp; <span style="color:#34D399;font-weight:600;">Aparece para: Impressão UV m²</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="item-card-acoes">
+          <div style="text-align:right;margin-right:12px;">
+            {% if m.tipo == 'click' %}
+              {% set total_click = m.custo_click_toner + m.custo_click_manutencao + m.custo_click_depreciacao %}
+              {% if m.custo_click_pb or m.custo_click_cor %}
+              <div class="custo-tag">P&B: <strong>R$ {{ "%.4f"|format(m.custo_click_pb) }}</strong></div>
+              <div class="custo-tag" style="margin-top:4px;">Cor: <strong>R$ {{ "%.4f"|format(m.custo_click_cor) }}</strong></div>
+              {% else %}
+              <div class="custo-tag">Toner: <strong>R$ {{ "%.4f"|format(m.custo_click_toner) }}</strong></div>
+              <div class="custo-tag" style="margin-top:4px;">Total/click: <strong>R$ {{ "%.4f"|format(total_click) }}</strong></div>
+              {% endif %}
+            {% else %}
+              {% set total_m2 = m.custo_m2_impressao + m.custo_m2_depreciacao %}
+              <div class="custo-tag">Impressão: <strong>R$ {{ "%.2f"|format(m.custo_m2_impressao) }}/m²</strong></div>
+              <div class="custo-tag" style="margin-top:4px;">Total op./m²: <strong>R$ {{ "%.2f"|format(total_m2) }}</strong></div>
+            {% endif %}
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick='editarMaquina({{ m|tojson }})'><i data-lucide="pencil"></i></button>
+          <form method="post" action="{{ url_for('prec_excluir_maquina', id=m.id) }}" onsubmit="return confirm('Excluir {{ m.nome }}?')">
+            <button class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="vazio" style="margin-bottom:16px;"><p>Nenhuma máquina cadastrada ainda.</p></div>
+  {% endif %}
+
+  <div class="add-form" id="form-maquina">
+    <h4 id="titulo-form-maquina">+ Nova Máquina</h4>
+    <form method="post" action="{{ url_for('prec_nova_maquina') }}" id="action-form-maquina">
+      <input type="hidden" name="_maquina_id" id="maquina_id_hidden">
+      <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Nome da Máquina <span style="color:var(--primaria)">*</span></label>
+          <input type="text" name="nome" id="maq_nome" class="form-control" placeholder="Ex: Toner Konica C3300" required>
+        </div>
+        <div class="form-group">
+          <label>Tipo de custo</label>
+          <select name="tipo" id="maq_tipo" class="form-control" onchange="alternarTipoMaquina(this.value)">
+            <option value="click">Por click (Toner/Digital) — Papel e Encadernados</option>
+            <option value="m2">Por m² (UV Plano / Chapa) — Impressão UV m²</option>
+            <option value="bobina">Bobina (Eco-Solvente / UV Rolo) — Mídia Flexível</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Click fields -->
+      <div id="campos-click">
+        <div class="form-grid form-grid-3" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Custo toner/click (R$)</label>
+            <input type="number" name="custo_click_toner" id="maq_toner" class="form-control" step="0.0001" placeholder="0,0000">
+          </div>
+          <div class="form-group">
+            <label>Manutenção/click (R$)</label>
+            <input type="number" name="custo_click_manutencao" id="maq_manut" class="form-control" step="0.0001" placeholder="0,0000">
+          </div>
+          <div class="form-group">
+            <label>Depreciação/click (R$)</label>
+            <input type="number" name="custo_click_depreciacao" id="maq_deprec" class="form-control" step="0.0001" placeholder="0,0000">
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);margin-bottom:12px;">
+          Total por click (soma acima): <strong id="preview-click" style="color:var(--secundaria)">R$ 0,0000</strong>
+          &nbsp;·&nbsp; Frente e verso = 2 clicks/folha
+        </div>
+        <!-- Click P&B vs Cor -->
+        <div style="padding:12px 14px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.2);border-radius:8px;">
+          <div style="font-size:.78rem;font-weight:700;color:#818CF8;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;">Custo diferenciado P&B / Colorido (opcional)</div>
+          <div class="form-grid form-grid-2">
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:.82rem;">Custo total click P&B (R$)</label>
+              <input type="number" name="custo_click_pb" id="maq_click_pb" class="form-control" step="0.0001" placeholder="0,0000" oninput="atualizarPreviewClick()">
+              <small class="text-muted">Ex: R$ 0,0300 (toner+manutenção+deprec)</small>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:.82rem;">Custo total click Colorido (R$)</label>
+              <input type="number" name="custo_click_cor" id="maq_click_cor" class="form-control" step="0.0001" placeholder="0,0000" oninput="atualizarPreviewClick()">
+              <small class="text-muted">Ex: R$ 0,3500 (toner cor+manutenção+deprec)</small>
+            </div>
+          </div>
+          <div style="font-size:.78rem;color:var(--texto-muted);margin-top:8px;">Se preenchidos, a calculadora perguntará o tipo de impressão (P&B / Cor / Mista) e calculará o custo correto.</div>
+        </div>
+      </div>
+
+      <!-- m² fields (UV Plano) -->
+      <div id="campos-m2" style="display:none;">
+        <p class="text-muted text-sm mb-8">Informe os custos operacionais por m² desta máquina UV. Branco e verniz são opcionais — ficam disponíveis na calculadora quando o operador os solicitar.</p>
+        <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Tinta CMYK / m² (R$)</label>
+            <input type="number" name="custo_m2_impressao" id="maq_imp" class="form-control" step="0.01" placeholder="0,00" oninput="atualizarPreviewM2()">
+            <small class="text-muted">Custo de tinta colorida por m²</small>
+          </div>
+          <div class="form-group">
+            <label>Depreciação+manutenção / m² (R$)</label>
+            <input type="number" name="custo_m2_depreciacao" id="maq_dep2" class="form-control" step="0.01" placeholder="0,00" oninput="atualizarPreviewM2()">
+          </div>
+        </div>
+        <div style="padding:12px 14px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);border-radius:8px;margin-bottom:12px;">
+          <div style="font-size:.78rem;font-weight:700;color:#60A5FA;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;">Tintas especiais (opcional)</div>
+          <div class="form-grid form-grid-2">
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:.82rem;">Tinta Branca (underbase) / m² (R$)</label>
+              <input type="number" name="custo_m2_branco" id="maq_branco" class="form-control" step="0.01" placeholder="0,00" oninput="atualizarPreviewM2()">
+              <small class="text-muted">Custo da tinta branca por m²</small>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:.82rem;">Verniz Localizado / m² (R$)</label>
+              <input type="number" name="custo_m2_verniz" id="maq_verniz" class="form-control" step="0.01" placeholder="0,00" oninput="atualizarPreviewM2()">
+              <small class="text-muted">Custo do verniz por m²</small>
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);">
+          CMYK + Depreciação: <strong id="preview-m2" style="color:var(--secundaria)">R$ 0,00</strong>
+          &nbsp;·&nbsp; Branco: <strong id="preview-m2-branco" style="color:#60A5FA">R$ 0,00</strong>
+          &nbsp;·&nbsp; Verniz: <strong id="preview-m2-verniz" style="color:#34D399">R$ 0,00</strong>
+        </div>
+      </div>
+
+      <!-- Bobina fields (Eco-Solvente / UV Rolo) -->
+      <div id="campos-bobina-maq" style="display:none;">
+        <p class="text-muted text-sm mb-8">O custo da mídia vem das <strong>Mídias em Bobina</strong> cadastradas. Aqui informe os custos operacionais da máquina.</p>
+        <div class="form-grid form-grid-3" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Boca da máquina (cm)</label>
+            <input type="number" name="boca_cm" id="maq_boca" class="form-control" step="0.1" placeholder="160">
+            <small class="text-muted">Largura máx. da bobina</small>
+          </div>
+          <div class="form-group">
+            <label>Custo tinta/m² (R$)</label>
+            <input type="number" name="custo_m2_impressao_bob" id="maq_imp_bob" class="form-control" step="0.01" placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label>Depreciação/m² (R$)</label>
+            <input type="number" name="custo_m2_depreciacao_bob" id="maq_dep2_bob" class="form-control" step="0.01" placeholder="0,00">
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);margin-top:8px;">
+          Total operacional/m²: <strong id="preview-m2-bob" style="color:var(--secundaria)">R$ 0,00</strong>
+        </div>
+      </div>
+
+      <div class="d-flex gap-8 mt-16">
+        <button type="submit" class="btn btn-primario" id="btn-salvar-maq"><i data-lucide="save"></i> Salvar Máquina</button>
+        <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoMaquina()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════ ACABAMENTOS ══════════ -->
+<div class="config-panel" id="tab-acabamentos">
+  <div class="d-flex justify-between align-center mb-16">
+    <div>
+      <h3>Acabamentos e Processos</h3>
+      <p class="text-muted text-sm">Cada processo com seu próprio custo e markup.</p>
+    </div>
+  </div>
+
+  {% if acabamentos %}
+    {% for a in acabamentos %}
+    <div class="item-card">
+      <div class="item-card-header">
+        <div>
+          <div class="item-card-titulo">
+            {{ a.nome }}
+            <span class="tipo-badge tipo-{{ a.tipo }}" style="margin-left:8px;">
+              {{ 'Bobina' if a.tipo=='bobina' else 'Por hora' if a.tipo=='hora' else 'Por job' if a.tipo=='job' else 'Por unidade' if a.tipo=='unidade' else a.tipo }}
+            </span>
+          </div>
+          <div class="item-card-sub">
+            {% if a.tipo == 'bobina' %}
+              Bobina: {{ a.bobina_largura }}cm × {{ a.bobina_comprimento }}m = R$ {{ "%.2f"|format(a.bobina_custo) }}
+              &nbsp;·&nbsp; Custo/m: R$ {{ "%.4f"|format(a.bobina_custo / a.bobina_comprimento if a.bobina_comprimento else 0) }}
+            {% elif a.tipo == 'hora' %}
+              R$ {{ "%.2f"|format(a.custo_base) }}/hora &nbsp;·&nbsp; Markup: ×{{ "%.1f"|format(a.markup) }}
+            {% else %}
+              R$ {{ "%.4f"|format(a.custo_base) }}/{{ a.unidade }} &nbsp;·&nbsp; Markup: ×{{ "%.1f"|format(a.markup) }}
+            {% endif %}
+          </div>
+        </div>
+        <div class="item-card-acoes">
+          <button class="btn btn-ghost btn-sm" onclick='editarAcabamento({{ a|tojson }})'><i data-lucide="pencil"></i></button>
+          <form method="post" action="{{ url_for('prec_excluir_acabamento', id=a.id) }}" onsubmit="return confirm('Excluir {{ a.nome }}?')">
+            <button class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="vazio" style="margin-bottom:16px;"><p>Nenhum acabamento cadastrado ainda.</p></div>
+  {% endif %}
+
+  <div class="add-form" id="form-acabamento">
+    <h4 id="titulo-form-acabamento">+ Novo Acabamento / Processo</h4>
+    <form method="post" action="{{ url_for('prec_novo_acabamento') }}" id="action-form-acabamento">
+      <input type="hidden" name="_acabamento_id" id="acabamento_id_hidden">
+      <input type="hidden" name="categoria" value="papel">
+      <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Nome do processo <span style="color:var(--primaria)">*</span></label>
+          <input type="text" name="nome" id="acab_nome" class="form-control" placeholder="Ex: Laminação Fosca, Guilhotina..." required>
+        </div>
+        <div class="form-group">
+          <label>Tipo de cálculo</label>
+          <select name="tipo" id="acab_tipo" class="form-control" onchange="alternarTipoAcabamento(this.value)">
+            <option value="bobina">Bobina (Laminação)</option>
+            <option value="wireo">Wire-O / Espiral</option>
+            <option value="hora">Por hora-máquina (Guilhotina)</option>
+            <option value="unidade">Por unidade/batida (Vincadeira, Hotmelt)</option>
+            <option value="job">Custo fixo por job</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Bobina fields -->
+      <div id="campos-bobina">
+        <p class="text-muted text-sm mb-8">O sistema calculará o custo por folha automaticamente a partir do custo da bobina.</p>
+        <div class="form-grid form-grid-3" style="margin-bottom:8px;">
+          <div class="form-group">
+            <label>Largura da bobina (cm)</label>
+            <input type="number" name="bobina_largura" id="bob_larg" class="form-control" step="0.1" placeholder="32">
+          </div>
+          <div class="form-group">
+            <label>Comprimento da bobina (m)</label>
+            <input type="number" name="bobina_comprimento" id="bob_comp" class="form-control" step="1" placeholder="2000">
+          </div>
+          <div class="form-group">
+            <label>Custo da bobina (R$)</label>
+            <input type="number" name="bobina_custo" id="bob_custo" class="form-control" step="0.01" placeholder="0,00">
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);">
+          Custo por metro linear: <strong id="preview-bobina" style="color:var(--secundaria)">R$ 0,0000</strong>
+          &nbsp;·&nbsp; Ex: folha 33cm = <strong id="preview-folha-bob">R$ 0,0000</strong>
+        </div>
+      </div>
+
+      <!-- Wire-O fields -->
+      <div id="campos-wireo" style="display:none;">
+        <p class="text-muted text-sm mb-8">Cadastre um rolo/bobina de Wire-O. O sistema calculará o custo por anel e usará isso na calculadora.</p>
+        <div class="form-grid form-grid-3" style="margin-bottom:8px;">
+          <div class="form-group">
+            <label>Custo do rolo (R$)</label>
+            <input type="number" name="wireo_rolo_custo" id="wireo_custo" class="form-control" step="0.01" placeholder="600,00" oninput="atualizarPreviewWireo()">
+          </div>
+          <div class="form-group">
+            <label>Anéis por rolo</label>
+            <input type="number" name="wireo_rolo_aneis" id="wireo_aneis" class="form-control" step="1" placeholder="3100" oninput="atualizarPreviewWireo()">
+          </div>
+          <div class="form-group">
+            <label>Markup (×)</label>
+            <input type="number" name="wireo_markup" id="wireo_mkp" class="form-control" step="0.1" placeholder="2.0">
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);">
+          Custo por anel: <strong id="preview-wireo" style="color:var(--secundaria)">R$ 0,0000</strong>
+          &nbsp;·&nbsp; Exemplo (16 anéis/produto): <strong id="preview-wireo-prod">R$ 0,0000</strong>/produto
+        </div>
+      </div>
+
+      <!-- Hora fields -->
+      <div id="campos-hora" style="display:none;">
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Custo por hora (R$)</label>
+            <input type="number" name="custo_base" id="acab_hora" class="form-control" step="0.01" placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label>Markup deste processo (×)</label>
+            <input type="number" name="hora_markup" id="acab_mkp_hora" class="form-control" step="0.1" placeholder="2.0">
+          </div>
+        </div>
+        <p class="text-muted text-sm mt-8">Na calculadora você informará quantos minutos o processo levará para o job específico.</p>
+      </div>
+
+      <!-- Unidade fields -->
+      <div id="campos-unidade" style="display:none;">
+        <div class="form-grid form-grid-3">
+          <div class="form-group">
+            <label>Custo por unidade/batida (R$)</label>
+            <input type="number" name="custo_base" id="acab_unit" class="form-control" step="0.0001" placeholder="0,0000">
+          </div>
+          <div class="form-group">
+            <label>Unidade</label>
+            <input type="text" name="unidade" id="acab_unidade_txt" class="form-control" placeholder="vinco, unidade, folha...">
+          </div>
+          <div class="form-group">
+            <label>Markup deste processo (×)</label>
+            <input type="number" name="unidade_markup" id="acab_mkp_unit" class="form-control" step="0.1" placeholder="2.0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Job fields -->
+      <div id="campos-job" style="display:none;">
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Custo fixo por job (R$)</label>
+            <input type="number" name="custo_base" id="acab_job" class="form-control" step="0.01" placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label>Markup deste processo (×)</label>
+            <input type="number" name="job_markup" id="acab_mkp_job" class="form-control" step="0.1" placeholder="2.0">
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-8 mt-16">
+        <button type="submit" class="btn btn-primario" id="btn-salvar-acab"><i data-lucide="save"></i> Salvar Acabamento</button>
+        <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoAcabamento()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════ ACABAMENTOS UV/ECO ══════════ -->
+<div class="config-panel" id="tab-acabamentos-uv">
+  <div class="d-flex justify-between align-center mb-16">
+    <div>
+      <h3>Acabamentos UV/Eco-Solvente</h3>
+      <p class="text-muted text-sm">Acabamentos e processos específicos para impressões em bobina (UV plano, eco-solvente). Ex: corte, ilhós, bastão, calandra, acabamento especial.</p>
+    </div>
+  </div>
+
+  {% if acabamentos_uv %}
+    {% for a in acabamentos_uv %}
+    <div class="item-card">
+      <div class="item-card-header">
+        <div>
+          <div class="item-card-titulo">
+            {{ a.nome }}
+            <span class="tipo-badge tipo-{{ a.tipo }}" style="margin-left:8px;">
+              {{ 'Bobina' if a.tipo=='bobina' else 'Por hora' if a.tipo=='hora' else 'Por job' if a.tipo=='job' else 'Por unidade' if a.tipo=='unidade' else a.tipo }}
+            </span>
+          </div>
+          <div class="item-card-sub">
+            {% if a.tipo == 'bobina' %}
+              Bobina: {{ a.bobina_largura }}cm × {{ a.bobina_comprimento }}m = R$ {{ "%.2f"|format(a.bobina_custo) }}
+            {% elif a.tipo == 'hora' %}
+              R$ {{ "%.2f"|format(a.custo_base) }}/hora &nbsp;·&nbsp; Markup: ×{{ "%.1f"|format(a.markup) }}
+            {% else %}
+              R$ {{ "%.4f"|format(a.custo_base) }}/{{ a.unidade }} &nbsp;·&nbsp; Markup: ×{{ "%.1f"|format(a.markup) }}
+            {% endif %}
+          </div>
+        </div>
+        <div class="item-card-acoes">
+          <button class="btn btn-ghost btn-sm" onclick='editarAcabamentoUV({{ a|tojson }})'><i data-lucide="pencil"></i></button>
+          <form method="post" action="{{ url_for('prec_excluir_acabamento_uv', id=a.id) }}" onsubmit="return confirm('Excluir {{ a.nome }}?')">
+            <button class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="vazio" style="margin-bottom:16px;"><p>Nenhum acabamento UV/Eco cadastrado ainda.</p></div>
+  {% endif %}
+
+  <div class="add-form" id="form-acabamento-uv">
+    <h4 id="titulo-form-acabamento-uv">+ Novo Acabamento UV/Eco</h4>
+    <form method="post" action="{{ url_for('prec_novo_acabamento_uv') }}" id="action-form-acabamento-uv">
+      <input type="hidden" name="_acabamento_id" id="acabamento-uv-id-hidden">
+      <input type="hidden" name="categoria" value="uv_eco">
+      <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Nome do processo <span style="color:var(--primaria)">*</span></label>
+          <input type="text" name="nome" id="acab-uv-nome" class="form-control" placeholder="Ex: Corte vinilo, Ilhós, Bastão, Calandra..." required>
+        </div>
+        <div class="form-group">
+          <label>Tipo de cálculo</label>
+          <select name="tipo" id="acab-uv-tipo" class="form-control" onchange="alternarTipoAcabamentoUV(this.value)">
+            <option value="unidade">Por unidade/batida</option>
+            <option value="job">Custo fixo por job</option>
+            <option value="hora">Por hora-máquina</option>
+            <option value="bobina">Bobina (Laminação)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Unidade fields UV -->
+      <div id="campos-unidade-uv">
+        <div class="form-grid form-grid-3">
+          <div class="form-group">
+            <label>Custo por unidade/batida (R$)</label>
+            <input type="number" name="custo_base" id="acab-uv-unit" class="form-control" step="0.0001" placeholder="0,0000">
+          </div>
+          <div class="form-group">
+            <label>Unidade</label>
+            <input type="text" name="unidade" id="acab-uv-unidade-txt" class="form-control" placeholder="ilhó, m², corte...">
+          </div>
+          <div class="form-group">
+            <label>Markup deste processo (×)</label>
+            <input type="number" name="unidade_markup" id="acab-uv-mkp-unit" class="form-control" step="0.1" placeholder="2.0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Job fields UV -->
+      <div id="campos-job-uv" style="display:none;">
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Custo fixo por job (R$)</label>
+            <input type="number" name="custo_base" id="acab-uv-job" class="form-control" step="0.01" placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label>Markup deste processo (×)</label>
+            <input type="number" name="job_markup" id="acab-uv-mkp-job" class="form-control" step="0.1" placeholder="2.0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Hora fields UV -->
+      <div id="campos-hora-uv" style="display:none;">
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Custo por hora (R$)</label>
+            <input type="number" name="custo_base" id="acab-uv-hora" class="form-control" step="0.01" placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label>Markup deste processo (×)</label>
+            <input type="number" name="hora_markup" id="acab-uv-mkp-hora" class="form-control" step="0.1" placeholder="2.0">
+          </div>
+        </div>
+        <p class="text-muted text-sm mt-8">Na calculadora você informará quantos minutos o processo levará para o job específico.</p>
+      </div>
+
+      <!-- Bobina fields UV (laminação fria / calandra) -->
+      <div id="campos-bobina-uv" style="display:none;">
+        <p class="text-muted text-sm mb-8">O sistema calculará o custo por folha automaticamente a partir do custo da bobina.</p>
+        <div class="form-grid form-grid-3" style="margin-bottom:8px;">
+          <div class="form-group">
+            <label>Largura da bobina (cm)</label>
+            <input type="number" name="bobina_largura" id="bob-uv-larg" class="form-control" step="0.1" placeholder="32" oninput="atualizarPreviewBobinaUV()">
+          </div>
+          <div class="form-group">
+            <label>Comprimento da bobina (m)</label>
+            <input type="number" name="bobina_comprimento" id="bob-uv-comp" class="form-control" step="1" placeholder="2000" oninput="atualizarPreviewBobinaUV()">
+          </div>
+          <div class="form-group">
+            <label>Custo da bobina (R$)</label>
+            <input type="number" name="bobina_custo" id="bob-uv-custo" class="form-control" step="0.01" placeholder="0,00" oninput="atualizarPreviewBobinaUV()">
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);">
+          Custo por metro linear: <strong id="preview-bobina-uv" style="color:var(--secundaria)">R$ 0,0000</strong>
+        </div>
+      </div>
+
+      <div class="d-flex gap-8 mt-16">
+        <button type="submit" class="btn btn-primario" id="btn-salvar-acab-uv"><i data-lucide="save"></i> Salvar Acabamento UV/Eco</button>
+        <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoAcabamentoUV()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════ ACRÍLICO UV ══════════ -->
+<div class="config-panel" id="tab-acrilicos">
+  <div class="d-flex justify-between align-center mb-16">
+    <div>
+      <h3>Chapas de Acrílico</h3>
+      <p class="text-muted text-sm">Cadastre as chapas com dimensões, espessura e custo. O sistema calcula automaticamente quantas peças cabem por chapa.</p>
+    </div>
+  </div>
+
+  {% if acrilicos %}
+    {% for a in acrilicos %}
+    <div class="item-card">
+      <div class="item-card-header">
+        <div>
+          <div class="item-card-titulo">{{ a.nome }}</div>
+          <div class="item-card-sub">{{ a.largura_cm }}×{{ a.altura_cm }} cm &nbsp;·&nbsp; {{ a.espessura_mm }}mm &nbsp;·&nbsp; {{ a.cor }}</div>
+        </div>
+        <div class="item-card-acoes">
+          <div style="text-align:right;margin-right:12px;">
+            <div class="custo-tag">Chapa: <strong>R$ {{ "%.2f"|format(a.custo) }}</strong></div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick='editarAcrilico({{ a|tojson }})'><i data-lucide="pencil"></i></button>
+          <form method="post" action="{{ url_for('prec_excluir_acrilico', id=a.id) }}" onsubmit="return confirm('Excluir {{ a.nome }}?')">
+            <button class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="vazio" style="margin-bottom:16px;"><p>Nenhuma chapa cadastrada ainda.</p></div>
+  {% endif %}
+
+  <div class="add-form" id="form-acrilico">
+    <h4 id="titulo-form-acrilico">+ Nova Chapa de Acrílico</h4>
+    <form method="post" action="{{ url_for('prec_novo_acrilico') }}" id="action-form-acrilico">
+      <input type="hidden" name="_acrilico_id" id="acrilico_id_hidden">
+      <div class="form-grid form-grid-3" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Nome <span style="color:var(--primaria)">*</span></label>
+          <input type="text" name="nome" id="acrilico_nome" class="form-control" placeholder="Ex: Acrílico 3mm Transparente" required>
+        </div>
+        <div class="form-group">
+          <label>Largura (cm)</label>
+          <input type="number" name="largura_cm" id="acrilico_larg" class="form-control" step="0.1" placeholder="122">
+        </div>
+        <div class="form-group">
+          <label>Altura (cm)</label>
+          <input type="number" name="altura_cm" id="acrilico_alt" class="form-control" step="0.1" placeholder="244">
+        </div>
+      </div>
+      <div class="form-grid form-grid-3" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Espessura (mm)</label>
+          <input type="number" name="espessura_mm" id="acrilico_esp" class="form-control" step="0.5" placeholder="3">
+        </div>
+        <div class="form-group">
+          <label>Cor / Tipo</label>
+          <input type="text" name="cor" id="acrilico_cor" class="form-control" placeholder="Transparente, Branco, Fumê...">
+        </div>
+        <div class="form-group">
+          <label>Custo da Chapa (R$)</label>
+          <input type="number" name="custo" id="acrilico_custo" class="form-control" step="0.01" placeholder="0,00">
+        </div>
+      </div>
+      <div class="d-flex gap-8">
+        <button type="submit" class="btn btn-primario" id="btn-salvar-acrilico"><i data-lucide="save"></i> Salvar Chapa</button>
+        <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoAcrilico()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Equipamentos de Corte -->
+  <div style="margin-top:24px;">
+    <div class="d-flex justify-between align-center mb-16">
+      <div>
+        <h3>Equipamentos de Corte</h3>
+        <p class="text-muted text-sm">Router CNC, laser, mesa de corte — informe o custo/hora e na calculadora informe o tempo por peça.</p>
+      </div>
+    </div>
+
+    {% if maquinas_corte %}
+      {% for mc in maquinas_corte %}
+      <div class="item-card">
+        <div class="item-card-header">
+          <div>
+            <div class="item-card-titulo">{{ mc.nome }}</div>
+            <div class="item-card-sub">Custo operacional por hora</div>
+          </div>
+          <div class="item-card-acoes">
+            <div style="text-align:right;margin-right:12px;">
+              <div class="custo-tag">R$ {{ "%.2f"|format(mc.custo_hora) }}/h</div>
+              <div class="custo-tag" style="margin-top:4px;font-size:.72rem;">≈ R$ {{ "%.4f"|format(mc.custo_hora/60) }}/min</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick='editarMaqCorte({{ mc|tojson }})'><i data-lucide="pencil"></i></button>
+            <form method="post" action="{{ url_for('prec_excluir_maquina_corte', id=mc.id) }}" onsubmit="return confirm('Excluir {{ mc.nome }}?')">
+              <button class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="vazio" style="margin-bottom:16px;"><p>Nenhum equipamento de corte cadastrado ainda.</p></div>
+    {% endif %}
+
+    <div class="add-form" id="form-maq-corte">
+      <h4 id="titulo-form-maq-corte">+ Novo Equipamento de Corte</h4>
+      <form method="post" action="{{ url_for('prec_nova_maquina_corte') }}" id="action-form-maq-corte">
+        <input type="hidden" name="_maq_corte_id" id="maq_corte_id_hidden">
+        <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Nome do Equipamento <span style="color:var(--primaria)">*</span></label>
+            <input type="text" name="nome" id="maq_corte_nome" class="form-control" placeholder="Ex: Router CNC Omni, Laser 60W, Mesa de Corte" required>
+          </div>
+          <div class="form-group">
+            <label>Custo operacional / hora (R$)</label>
+            <input type="number" name="custo_hora" id="maq_corte_hora" class="form-control" step="0.01" placeholder="0,00" oninput="atualizarPreviewCorte()">
+            <small class="text-muted">Inclua energia, manutenção, depreciação e MO</small>
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);margin-bottom:12px;">
+          Custo por minuto: <strong id="preview-corte-min" style="color:var(--secundaria)">R$ 0,0000</strong>
+          &nbsp;·&nbsp; Custo por segundo: <strong id="preview-corte-seg" style="color:var(--secundaria)">R$ 0,000000</strong>
+        </div>
+        <div class="d-flex gap-8">
+          <button type="submit" class="btn btn-primario" id="btn-salvar-maq-corte"><i data-lucide="save"></i> Salvar Equipamento</button>
+          <button type="button" class="btn btn-secundario" onclick="cancelarEdicaoMaqCorte()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ APOSTILAS ══════════ -->
+<div class="config-panel" id="tab-apostilas">
+  <div class="card mb-16">
+    <div class="card-header"><h3>Configurações de Apostilas</h3></div>
+    <div class="card-body">
+      <form method="post">
+        <div class="form-grid form-grid-3">
+          <div class="form-group">
+            <label>Custo da Capa Plástica (R$/unidade)</label>
+            <input type="number" name="apostila_capa_plastico_custo" class="form-control" step="0.01" min="0"
+                   value="{{ apostila_capa_plastico_custo }}" placeholder="0,00">
+            <small class="text-muted">Custo fixo por unidade — transparente ou colorida. Usado quando capa = Plástica.</small>
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Custo do Espiral por Faixa de Páginas</label>
+            <small class="text-muted" style="display:block;margin-bottom:8px;">Cada faixa define o custo do espiral conforme o número de páginas da apostila. A última faixa vale para qualquer quantidade acima.</small>
+            <div id="espiral_faixas_lista" style="display:flex;flex-direction:column;gap:6px;">
+              {% for f in apostila_espiral_faixas %}
+              <div class="espiral-faixa-row" style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:.82rem;color:var(--texto-muted);white-space:nowrap;">Até</span>
+                <input type="number" name="espiral_faixa_ate[]" class="form-control" style="width:80px;" min="1" step="1" value="{{ f.ate }}" placeholder="págs">
+                <span style="font-size:.82rem;color:var(--texto-muted);white-space:nowrap;">páginas → R$</span>
+                <input type="number" name="espiral_faixa_custo[]" class="form-control" style="width:90px;" min="0" step="0.01" value="{{ f.custo }}" placeholder="0,00">
+                <button type="button" onclick="removerFaixaEspiral(this)" style="background:none;border:1px solid #EF4444;color:#EF4444;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:.8rem;">×</button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" onclick="adicionarFaixaEspiral()" style="margin-top:8px;background:none;border:1px dashed var(--primaria);color:var(--primaria);border-radius:4px;padding:5px 12px;cursor:pointer;font-size:.82rem;">+ Adicionar Faixa</button>
+            <script>
+            function adicionarFaixaEspiral() {
+              const lista = document.getElementById('espiral_faixas_lista');
+              const div = document.createElement('div');
+              div.className = 'espiral-faixa-row';
+              div.style.cssText = 'display:flex;align-items:center;gap:8px;';
+              div.innerHTML = '<span style="font-size:.82rem;color:var(--texto-muted);white-space:nowrap;">Até</span>'
+                + '<input type="number" name="espiral_faixa_ate[]" class="form-control" style="width:80px;" min="1" step="1" placeholder="págs">'
+                + '<span style="font-size:.82rem;color:var(--texto-muted);white-space:nowrap;">páginas → R$</span>'
+                + '<input type="number" name="espiral_faixa_custo[]" class="form-control" style="width:90px;" min="0" step="0.01" placeholder="0,00">'
+                + '<button type="button" onclick="removerFaixaEspiral(this)" style="background:none;border:1px solid #EF4444;color:#EF4444;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:.8rem;">×</button>';
+              lista.appendChild(div);
+            }
+            function removerFaixaEspiral(btn) {
+              const lista = document.getElementById('espiral_faixas_lista');
+              if (lista.children.length <= 1) return;
+              btn.closest('.espiral-faixa-row').remove();
+            }
+            </script>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);">
+          A <strong>capa impressa</strong> é configurada direto na calculadora: escolha papel + máquina + laminação opcional.
+        </div>
+        <button type="submit" class="btn btn-primario mt-16"><i data-lucide="save"></i> Salvar Configurações</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ GERAL ══════════ -->
+<div class="config-panel" id="tab-geral">
+  <div class="card">
+    <div class="card-header"><h3>Configurações Gerais</h3></div>
+    <div class="card-body">
+      <form method="post">
+        <div class="form-grid form-grid-3">
+          <div class="form-group">
+            <label>Taxa de Mão de Obra (R$/minuto)</label>
+            <input type="number" name="mo_taxa_min" class="form-control" step="0.01"
+                   value="{{ mo_taxa }}" placeholder="1.67">
+            <small class="text-muted">R$1,67/min = R$100/hora.</small>
+          </div>
+          <div class="form-group">
+            <label>Invest. Contínuo sobre o Custo (%)</label>
+            <input type="number" name="overhead_pct" class="form-control" step="0.1" min="0" max="100"
+                   value="{{ overhead_pct }}" placeholder="0">
+            <small class="text-muted">Aplicado sobre o custo total, antes do markup. Cobre aluguel, energia, etc.</small>
+          </div>
+          <div class="form-group">
+            <label>Invest. Contínuo sobre a Venda (%)</label>
+            <input type="number" name="invest_venda_pct" class="form-control" step="0.1" min="0" max="100"
+                   value="{{ invest_venda_pct }}" placeholder="0">
+            <small class="text-muted">Aplicado sobre o preço de venda após o markup.</small>
+          </div>
+        </div>
+        <div style="margin-top:4px;padding:10px 14px;background:var(--fundo);border-radius:6px;font-size:.82rem;color:var(--texto-muted);">
+          M.O.: R${{ mo_taxa }}/min = R${{ "%.2f"|format((mo_taxa|float)*60) }}/hora &nbsp;·&nbsp;
+          Invest. Custo: {{ overhead_pct }}% &nbsp;·&nbsp; Invest. Venda: {{ invest_venda_pct }}%
+        </div>
+        <button type="submit" class="btn btn-primario mt-16"><i data-lucide="save"></i> Salvar Configurações</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function trocarTab(nome) {
+  const ids = ['papeis','midias','papelao','maquinas','acabamentos','acabamentos-uv','acrilicos','apostilas','geral'];
+  document.querySelectorAll('.config-tab').forEach((t,i) => {
+    t.classList.toggle('ativo', ids[i] === nome);
+  });
+  document.querySelectorAll('.config-panel').forEach(p => p.classList.remove('ativo'));
+  document.getElementById('tab-' + nome).classList.add('ativo');
+  window.location.hash = nome;
+}
+
+// ── Mídias em Bobina ─────────────────────────────────────────────────────────
+function editarMidiaBobina(m) {
+  trocarTab('midias');
+  document.getElementById('titulo-form-midia').textContent = '✏️ Editar: ' + m.nome;
+  document.getElementById('midia_id_hidden').value = m.id;
+  document.getElementById('midia_nome').value = m.nome;
+  document.getElementById('midia_custo_m2').value = m.custo_m2;
+  document.getElementById('action-form-midia').action = `/precificacao/midia-bobina/${m.id}/editar`;
+  document.getElementById('form-midia-bobina').scrollIntoView({behavior:'smooth'});
+}
+function cancelarEdicaoMidia() {
+  document.getElementById('titulo-form-midia').textContent = '+ Nova Mídia em Bobina';
+  document.getElementById('btn-salvar-midia').innerHTML = '<i data-lucide="save"></i> Salvar Mídia';
+  document.getElementById('action-form-midia').reset();
+  document.getElementById('action-form-midia').action = '/precificacao/midia-bobina/nova';
+  lucide.createIcons();
+}
+if (window.location.hash) trocarTab(window.location.hash.replace('#',''));
+
+// ── Papéis ───────────────────────────────────────────────────────────────────
+function togglePapelFixo() {
+  const fixo = document.getElementById('papel_fixo').checked;
+  document.getElementById('label-papel-larg').textContent = fixo ? 'Largura do papel (cm)' : 'Largura da resma comprada (cm)';
+  document.getElementById('label-papel-alt').textContent  = fixo ? 'Altura do papel (cm)'  : 'Altura da resma comprada (cm)';
+  document.getElementById('label-papel-folhas').textContent = fixo ? 'Folhas por pacote/resma' : 'Folhas por resma';
+  document.getElementById('label-papel-custo').textContent  = fixo ? 'Custo do pacote/resma (R$)' : 'Custo da resma (R$)';
+  document.getElementById('campo-fator-perda').style.display = fixo ? 'none' : '';
+}
+function editarPapel(p) {
+  trocarTab('papeis');
+  document.getElementById('titulo-form-papel').textContent = '✏️ Editar: ' + p.nome;
+  document.getElementById('btn-salvar-papel').innerHTML = '<i data-lucide="save"></i> Salvar Alterações';
+  document.getElementById('papel_id_hidden').value = p.id;
+  document.getElementById('papel_nome').value = p.nome;
+  document.getElementById('papel_largura').value = p.largura;
+  document.getElementById('papel_altura').value = p.altura;
+  document.getElementById('papel_folhas').value = p.folhas_resma;
+  document.getElementById('papel_custo').value = p.custo_resma;
+  document.getElementById('papel_perda').value = p.fator_perda;
+  document.getElementById('papel_fixo').checked = !!p.tamanho_fixo;
+  togglePapelFixo();
+  const form = document.getElementById('action-form-papel');
+  form.action = `/precificacao/papel/${p.id}/editar`;
+  document.getElementById('form-papel').scrollIntoView({behavior:'smooth'});
+  lucide.createIcons();
+}
+function cancelarEdicaoPapel() {
+  document.getElementById('titulo-form-papel').textContent = '+ Novo Papel / Mídia';
+  document.getElementById('btn-salvar-papel').innerHTML = '<i data-lucide="save"></i> Salvar Papel';
+  document.getElementById('action-form-papel').reset();
+  document.getElementById('action-form-papel').action = '/precificacao/papel/novo';
+  document.getElementById('papel_folhas').value = '500';
+  document.getElementById('papel_perda').value = '5';
+  document.getElementById('papel_fixo').checked = false;
+  togglePapelFixo();
+  lucide.createIcons();
+}
+
+// ── Máquinas ──────────────────────────────────────────────────────────────────
+function alternarTipoMaquina(tipo) {
+  document.getElementById('campos-click').style.display     = tipo === 'click'   ? 'block' : 'none';
+  document.getElementById('campos-m2').style.display        = tipo === 'm2'      ? 'block' : 'none';
+  document.getElementById('campos-bobina-maq').style.display = tipo === 'bobina' ? 'block' : 'none';
+}
+
+['maq_toner','maq_manut','maq_deprec'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', atualizarPreviewClick);
+});
+['maq_imp','maq_dep2'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', atualizarPreviewM2);
+});
+['maq_imp_bob','maq_dep2_bob'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', atualizarPreviewM2Bob);
+});
+
+function atualizarPreviewClick() {
+  const t = parseFloat(document.getElementById('maq_toner').value)||0;
+  const m = parseFloat(document.getElementById('maq_manut').value)||0;
+  const d = parseFloat(document.getElementById('maq_deprec').value)||0;
+  document.getElementById('preview-click').textContent = 'R$ ' + (t+m+d).toFixed(4);
+}
+function atualizarPreviewM2() {
+  const cmyk  = parseFloat(document.getElementById('maq_imp').value)||0;
+  const dep   = parseFloat(document.getElementById('maq_dep2').value)||0;
+  const brnco = parseFloat(document.getElementById('maq_branco').value)||0;
+  const vrnz  = parseFloat(document.getElementById('maq_verniz').value)||0;
+  document.getElementById('preview-m2').textContent         = 'R$ ' + (cmyk+dep).toFixed(2);
+  document.getElementById('preview-m2-branco').textContent  = 'R$ ' + brnco.toFixed(2);
+  document.getElementById('preview-m2-verniz').textContent  = 'R$ ' + vrnz.toFixed(2);
+}
+function atualizarPreviewM2Bob() {
+  const b = parseFloat(document.getElementById('maq_imp_bob').value)||0;
+  const c = parseFloat(document.getElementById('maq_dep2_bob').value)||0;
+  document.getElementById('preview-m2-bob').textContent = 'R$ ' + (b+c).toFixed(2);
+}
+
+function editarMaquina(m) {
+  trocarTab('maquinas');
+  document.getElementById('titulo-form-maquina').textContent = '✏️ Editar: ' + m.nome;
+  document.getElementById('maquina_id_hidden').value = m.id;
+  document.getElementById('maq_nome').value = m.nome;
+  document.getElementById('maq_tipo').value = m.tipo;
+  alternarTipoMaquina(m.tipo);
+  if (m.tipo === 'bobina') {
+    document.getElementById('maq_boca').value = m.boca_cm;
+    document.getElementById('maq_imp_bob').value = m.custo_m2_impressao;
+    document.getElementById('maq_dep2_bob').value = m.custo_m2_depreciacao;
+    atualizarPreviewM2Bob();
+  } else if (m.tipo === 'click') {
+    document.getElementById('maq_toner').value = m.custo_click_toner;
+    document.getElementById('maq_manut').value = m.custo_click_manutencao;
+    document.getElementById('maq_deprec').value = m.custo_click_depreciacao;
+    document.getElementById('maq_click_pb').value = m.custo_click_pb || '';
+    document.getElementById('maq_click_cor').value = m.custo_click_cor || '';
+    atualizarPreviewClick();
+  } else {
+    document.getElementById('maq_imp').value    = m.custo_m2_impressao;
+    document.getElementById('maq_dep2').value   = m.custo_m2_depreciacao;
+    document.getElementById('maq_branco').value = m.custo_m2_branco || '';
+    document.getElementById('maq_verniz').value = m.custo_m2_verniz || '';
+    atualizarPreviewM2();
+  }
+  document.getElementById('action-form-maquina').action = `/precificacao/maquina/${m.id}/editar`;
+  document.getElementById('form-maquina').scrollIntoView({behavior:'smooth'});
+}
+function cancelarEdicaoMaquina() {
+  document.getElementById('titulo-form-maquina').textContent = '+ Nova Máquina';
+  document.getElementById('action-form-maquina').reset();
+  document.getElementById('action-form-maquina').action = '/precificacao/maquina/nova';
+  alternarTipoMaquina('click');
+}
+
+// ── Papelão ───────────────────────────────────────────────────────────────────
+function atualizarPreviewPapelao() {
+  const larg = parseFloat(document.getElementById('papelao_largura').value)||0;
+  const alt  = parseFloat(document.getElementById('papelao_altura').value)||0;
+  const el   = document.getElementById('preview-papelao');
+  if (!el) return;
+  if (larg <= 0 || alt <= 0) { el.textContent = 'Preencha as dimensões para ver exemplos de imposição.'; return; }
+  const exemplos = [
+    ['A5 (14.8×21cm)', 14.8, 21],
+    ['A4 (21×29.7cm)', 21, 29.7],
+    ['Ofício (21×33cm)', 21, 33],
+  ];
+  const txt = exemplos.map(([nome, pL, pA]) => {
+    const n1 = Math.floor(larg/pL) * Math.floor(alt/pA);
+    const n2 = Math.floor(larg/pA) * Math.floor(alt/pL);
+    const n = Math.max(n1, n2);
+    return `${nome}: ${n} peças`;
+  }).join(' · ');
+  el.innerHTML = txt;
+}
+function editarPapelao(p) {
+  trocarTab('papelao');
+  document.getElementById('titulo-form-papelao').textContent = 'Editar: ' + p.nome;
+  document.getElementById('btn-salvar-papelao').textContent = 'Salvar Alterações';
+  document.getElementById('papelao_id_hidden').value = p.id;
+  document.getElementById('papelao_nome').value = p.nome;
+  document.getElementById('papelao_largura').value = p.largura;
+  document.getElementById('papelao_altura').value = p.altura;
+  document.getElementById('papelao_custo').value = p.custo;
+  const form = document.getElementById('action-form-papelao');
+  form.action = `/precificacao/papelao/${p.id}/editar`;
+  atualizarPreviewPapelao();
+  document.getElementById('form-papelao').scrollIntoView({behavior:'smooth'});
+}
+function cancelarEdicaoPapelao() {
+  document.getElementById('titulo-form-papelao').textContent = '+ Novo Papelão / Paraná';
+  document.getElementById('btn-salvar-papelao').innerHTML = '<i data-lucide="save"></i> Salvar Papelão';
+  document.getElementById('action-form-papelao').reset();
+  document.getElementById('action-form-papelao').action = '/precificacao/papelao/novo';
+  lucide.createIcons();
+}
+
+// ── Acabamentos ───────────────────────────────────────────────────────────────
+function alternarTipoAcabamento(tipo) {
+  ['bobina','wireo','hora','unidade','job'].forEach(t =>
+    document.getElementById('campos-'+t).style.display = t === tipo ? 'block' : 'none'
+  );
+}
+function atualizarPreviewWireo() {
+  const custo = parseFloat(document.getElementById('wireo_custo').value)||0;
+  const aneis = parseFloat(document.getElementById('wireo_aneis').value)||0;
+  const pa = aneis > 0 ? custo/aneis : 0;
+  document.getElementById('preview-wireo').textContent = 'R$ ' + pa.toFixed(4);
+  document.getElementById('preview-wireo-prod').textContent = 'R$ ' + (pa*16).toFixed(4);
+}
+
+['bob_larg','bob_comp','bob_custo'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', atualizarPreviewBobina);
+});
+function atualizarPreviewBobina() {
+  const comp = parseFloat(document.getElementById('bob_comp').value)||0;
+  const custo = parseFloat(document.getElementById('bob_custo').value)||0;
+  const pm = comp > 0 ? custo/comp : 0;
+  document.getElementById('preview-bobina').textContent = 'R$ ' + pm.toFixed(4);
+  document.getElementById('preview-folha-bob').textContent = 'R$ ' + (pm * 0.33).toFixed(4);
+}
+
+function editarAcabamento(a) {
+  trocarTab('acabamentos');
+  document.getElementById('titulo-form-acabamento').textContent = '✏️ Editar: ' + a.nome;
+  document.getElementById('acabamento_id_hidden').value = a.id;
+  document.getElementById('acab_nome').value = a.nome;
+  document.getElementById('acab_tipo').value = a.tipo;
+  alternarTipoAcabamento(a.tipo);
+  document.getElementById('bob_larg').value = a.bobina_largura;
+  document.getElementById('bob_comp').value = a.bobina_comprimento;
+  document.getElementById('bob_custo').value = a.bobina_custo;
+  if(a.tipo==='hora') document.getElementById('acab_hora').value = a.custo_base;
+  if(a.tipo==='unidade') { document.getElementById('acab_unit').value = a.custo_base; document.getElementById('acab_unidade_txt').value = a.unidade; }
+  if(a.tipo==='job') document.getElementById('acab_job').value = a.custo_base;
+  if(a.tipo==='wireo') { document.getElementById('wireo_custo').value = a.bobina_custo || ''; document.getElementById('wireo_aneis').value = a.bobina_comprimento || ''; document.getElementById('wireo_mkp').value = a.markup || ''; atualizarPreviewWireo(); }
+  const mkpId = {hora:'acab_mkp_hora',unidade:'acab_mkp_unit',job:'acab_mkp_job'}[a.tipo];
+  if(mkpId) document.getElementById(mkpId).value = a.markup;
+  document.getElementById('action-form-acabamento').action = `/precificacao/acabamento/${a.id}/editar`;
+  atualizarPreviewBobina();
+  document.getElementById('form-acabamento').scrollIntoView({behavior:'smooth'});
+}
+function cancelarEdicaoAcabamento() {
+  document.getElementById('titulo-form-acabamento').textContent = '+ Novo Acabamento / Processo';
+  document.getElementById('action-form-acabamento').reset();
+  document.getElementById('action-form-acabamento').action = '/precificacao/acabamento/novo';
+  alternarTipoAcabamento('bobina');
+}
+
+// init
+alternarTipoAcabamento('bobina');
+
+// ── Acabamentos UV/Eco ────────────────────────────────────────────────────────
+function alternarTipoAcabamentoUV(tipo) {
+  ['unidade','job','hora','bobina'].forEach(t =>
+    document.getElementById('campos-'+t+'-uv').style.display = t === tipo ? 'block' : 'none'
+  );
+}
+function atualizarPreviewBobinaUV() {
+  const comp  = parseFloat(document.getElementById('bob-uv-comp').value)||0;
+  const custo = parseFloat(document.getElementById('bob-uv-custo').value)||0;
+  const pm = comp > 0 ? custo/comp : 0;
+  document.getElementById('preview-bobina-uv').textContent = 'R$ ' + pm.toFixed(4);
+}
+function editarAcabamentoUV(a) {
+  trocarTab('acabamentos-uv');
+  document.getElementById('titulo-form-acabamento-uv').textContent = '✏️ Editar: ' + a.nome;
+  document.getElementById('acabamento-uv-id-hidden').value = a.id;
+  document.getElementById('acab-uv-nome').value = a.nome;
+  const tipoUV = ['unidade','job','hora','bobina'].includes(a.tipo) ? a.tipo : 'unidade';
+  document.getElementById('acab-uv-tipo').value = tipoUV;
+  alternarTipoAcabamentoUV(tipoUV);
+  if (tipoUV === 'unidade') {
+    document.getElementById('acab-uv-unit').value = a.custo_base;
+    document.getElementById('acab-uv-unidade-txt').value = a.unidade;
+    document.getElementById('acab-uv-mkp-unit').value = a.markup;
+  } else if (tipoUV === 'job') {
+    document.getElementById('acab-uv-job').value = a.custo_base;
+    document.getElementById('acab-uv-mkp-job').value = a.markup;
+  } else if (tipoUV === 'hora') {
+    document.getElementById('acab-uv-hora').value = a.custo_base;
+    document.getElementById('acab-uv-mkp-hora').value = a.markup;
+  } else if (tipoUV === 'bobina') {
+    document.getElementById('bob-uv-larg').value = a.bobina_largura;
+    document.getElementById('bob-uv-comp').value = a.bobina_comprimento;
+    document.getElementById('bob-uv-custo').value = a.bobina_custo;
+    atualizarPreviewBobinaUV();
+  }
+  document.getElementById('action-form-acabamento-uv').action = `/precificacao/acabamento-uv/${a.id}/editar`;
+  document.getElementById('form-acabamento-uv').scrollIntoView({behavior:'smooth'});
+}
+function cancelarEdicaoAcabamentoUV() {
+  document.getElementById('titulo-form-acabamento-uv').textContent = '+ Novo Acabamento UV/Eco';
+  document.getElementById('action-form-acabamento-uv').reset();
+  document.getElementById('action-form-acabamento-uv').action = '/precificacao/acabamento-uv/novo';
+  // restore categoria value after reset
+  document.querySelector('#action-form-acabamento-uv input[name="categoria"]').value = 'uv_eco';
+  alternarTipoAcabamentoUV('unidade');
+  lucide.createIcons();
+}
+// init UV form
+alternarTipoAcabamentoUV('unidade');
+
+// ── Acrílico ─────────────────────────────────────────────────────────────────
+function editarAcrilico(a) {
+  trocarTab('acrilicos');
+  document.getElementById('titulo-form-acrilico').textContent = '✏️ Editar: ' + a.nome;
+  document.getElementById('acrilico_id_hidden').value = a.id;
+  document.getElementById('acrilico_nome').value = a.nome;
+  document.getElementById('acrilico_larg').value = a.largura_cm;
+  document.getElementById('acrilico_alt').value = a.altura_cm;
+  document.getElementById('acrilico_esp').value = a.espessura_mm;
+  document.getElementById('acrilico_cor').value = a.cor;
+  document.getElementById('acrilico_custo').value = a.custo;
+  document.getElementById('action-form-acrilico').action = `/precificacao/acrilico/${a.id}/editar`;
+  document.getElementById('form-acrilico').scrollIntoView({behavior:'smooth'});
+}
+function cancelarEdicaoAcrilico() {
+  document.getElementById('titulo-form-acrilico').textContent = '+ Nova Chapa de Acrílico';
+  document.getElementById('action-form-acrilico').reset();
+  document.getElementById('action-form-acrilico').action = '/precificacao/acrilico/novo';
+}
+
+// ── Equipamentos de Corte ─────────────────────────────────────────────────────
+function atualizarPreviewCorte() {
+  const h = parseFloat(document.getElementById('maq_corte_hora').value) || 0;
+  document.getElementById('preview-corte-min').textContent = 'R$ ' + (h/60).toFixed(4);
+  document.getElementById('preview-corte-seg').textContent = 'R$ ' + (h/3600).toFixed(6);
+}
+function editarMaqCorte(mc) {
+  trocarTab('acrilicos');
+  document.getElementById('titulo-form-maq-corte').textContent = '✏️ Editar: ' + mc.nome;
+  document.getElementById('maq_corte_id_hidden').value = mc.id;
+  document.getElementById('maq_corte_nome').value = mc.nome;
+  document.getElementById('maq_corte_hora').value = mc.custo_hora;
+  document.getElementById('action-form-maq-corte').action = `/precificacao/maquina-corte/${mc.id}/editar`;
+  atualizarPreviewCorte();
+  document.getElementById('form-maq-corte').scrollIntoView({behavior:'smooth'});
+}
+function cancelarEdicaoMaqCorte() {
+  document.getElementById('titulo-form-maq-corte').textContent = '+ Novo Equipamento de Corte';
+  document.getElementById('action-form-maq-corte').reset();
+  document.getElementById('action-form-maq-corte').action = '/precificacao/maquina-corte/nova';
+  document.getElementById('preview-corte-min').textContent = 'R$ 0,0000';
+  document.getElementById('preview-corte-seg').textContent = 'R$ 0,000000';
+}
+</script>
+{% endblock %}

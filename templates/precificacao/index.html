@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block titulo %}Precificação{% endblock %}
+{% block topbar_titulo %}Precificação{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('prec_calcular') }}" class="btn btn-primario">
+    <i data-lucide="plus"></i> Novo Cálculo
+  </a>
+  <a href="{{ url_for('prec_configuracoes') }}" class="btn btn-secundario">
+    <i data-lucide="settings-2"></i> Configurações
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+{% if not calculos %}
+<div class="card" style="text-align:center;padding:60px 20px;">
+  <i data-lucide="calculator" style="width:48px;height:48px;color:var(--texto-muted);margin:0 auto 16px;display:block;"></i>
+  <h3 style="margin-bottom:8px;">Nenhum cálculo salvo</h3>
+  <p class="text-muted" style="margin-bottom:24px;">Comece calculando o custo de um produto.</p>
+  <a href="{{ url_for('prec_calcular') }}" class="btn btn-primario">
+    <i data-lucide="plus"></i> Fazer primeiro cálculo
+  </a>
+</div>
+{% else %}
+<div class="card">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th>Tipo</th>
+          <th class="text-right">Qtd</th>
+          <th class="text-right">Custo</th>
+          <th class="text-right">Markup</th>
+          <th class="text-right">Venda</th>
+          <th>Data</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in calculos %}
+        <tr>
+          <td><span class="fw-600">{{ c.nome or 'Sem nome' }}</span></td>
+          <td class="text-muted text-sm">{{ c.tipo_produto or '—' }}</td>
+          <td class="text-right">{{ c.quantidade or '—' }}</td>
+          <td class="text-right">R$ {{ "%.2f"|format(c.custo_total or 0) }}</td>
+          <td class="text-right text-muted">× {{ "%.1f"|format(c.markup or 1) }}</td>
+          <td class="text-right fw-600 text-primaria">R$ {{ "%.2f"|format(c.preco_venda or 0) }}</td>
+          <td class="text-muted text-sm">{{ c.created_at[:10] }}</td>
+          <td>
+            <a href="{{ url_for('prec_ver_calculo', id=c.id) }}" class="btn btn-ghost btn-sm">
+              <i data-lucide="eye"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

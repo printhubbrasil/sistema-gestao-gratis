@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block titulo %}Notas Fiscais{% endblock %}
+{% block topbar_titulo %}Notas Fiscais{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('emitir_nf') }}" class="btn btn-primario">
+    <i data-lucide="plus"></i> Emitir NF
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="card">
+  <div class="table-container">
+    {% if notas %}
+    <table>
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Cliente</th>
+          <th>CPF / CNPJ</th>
+          <th>Serviço</th>
+          <th class="text-right">Valor</th>
+          <th>Status</th>
+          <th>Data</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for n in notas %}
+        <tr>
+          <td class="fw-600">NF {{ n.numero }}</td>
+          <td>{{ n.cliente_nome or '—' }}</td>
+          <td class="text-muted">{{ n.cliente_cpf_cnpj or '—' }}</td>
+          <td class="text-muted">{{ (n.descricao_servico or '')[:50] }}{% if n.descricao_servico and n.descricao_servico|length > 50 %}...{% endif %}</td>
+          <td class="text-right fw-600">R$ {{ "%.2f"|format(n.valor_total) }}</td>
+          <td><span class="badge badge-emitida">{{ n.status|title }}</span></td>
+          <td class="text-muted">{{ n.data_emissao }}</td>
+          <td>
+            <form method="post" action="{{ url_for('excluir_nf', id=n.id) }}" onsubmit="return confirm('Excluir NF {{ n.numero }}?')">
+              <button type="submit" class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="file-text"></i>
+      <p>Nenhuma nota fiscal emitida ainda. <a href="{{ url_for('emitir_nf') }}" style="color:var(--primaria)">Emitir a primeira</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

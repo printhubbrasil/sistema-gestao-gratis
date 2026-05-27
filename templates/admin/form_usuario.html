@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block titulo %}{{ 'Editar' if usuario else 'Novo' }} Usuário{% endblock %}
+{% block topbar_titulo %}{{ 'Editar' if usuario else 'Novo' }} Usuário{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-outline btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="card card-body" style="max-width:480px;">
+  <form method="POST">
+    <div class="form-group">
+      <label>Nome completo</label>
+      <input class="form-control" type="text" name="nome"
+             value="{{ usuario.nome if usuario else '' }}" required>
+    </div>
+    <div class="form-group">
+      <label>Login</label>
+      <input class="form-control" type="text" name="login"
+             value="{{ usuario.login if usuario else '' }}" required autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>
+        Senha
+        {% if usuario %}<small style="color:var(--texto-leve);font-weight:400;"> — deixe em branco para manter a atual</small>{% endif %}
+      </label>
+      <input class="form-control" type="password" name="senha"
+             autocomplete="new-password" {{ 'required' if not usuario else '' }}>
+    </div>
+    <div class="form-group">
+      <label>Nível de acesso</label>
+      <select class="form-control" name="nivel">
+        <option value="operador" {{ 'selected' if usuario and usuario.nivel == 'operador' else '' }}>Operador</option>
+        <option value="admin"    {{ 'selected' if usuario and usuario.nivel == 'admin'    else '' }}>Admin</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px;">
+      <button type="submit" class="btn btn-primario">Salvar</button>
+      <a href="{{ url_for('admin_usuarios') }}" class="btn btn-outline">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

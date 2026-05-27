@@ -1,0 +1,3463 @@
+{% extends 'base.html' %}
+{% block titulo %}Calculadora de Custos{% endblock %}
+{% block topbar_titulo %}Calculadora de Custos{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('prec_configuracoes') }}" class="btn btn-secundario">
+    <i data-lucide="settings-2"></i> Configurações
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+{% if not papeis or not maquinas %}
+<div class="card" style="text-align:center;padding:60px 20px;">
+  <i data-lucide="alert-circle" style="width:40px;height:40px;color:var(--secundaria);margin:0 auto 16px;display:block;"></i>
+  <h3 style="margin-bottom:8px;">Configure os cadastros primeiro</h3>
+  <p class="text-muted" style="margin-bottom:24px;">
+    Você precisa ter pelo menos um papel e uma máquina cadastrados para usar a calculadora.
+  </p>
+  <a href="{{ url_for('prec_configuracoes') }}" class="btn btn-primario">
+    <i data-lucide="settings-2"></i> Ir para Configurações
+  </a>
+</div>
+{% else %}
+<style>
+  .calc-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; align-items:start; }
+
+  /* Progress */
+  .wizard-progress { display:flex; align-items:center; gap:0; margin-bottom:24px; }
+  .wp-step { display:flex; align-items:center; gap:8px; font-size:.8rem; font-weight:600; color:var(--texto-muted); }
+  .wp-step .num { width:28px; height:28px; border-radius:50%; border:2px solid var(--borda); display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:700; background:var(--card-bg); transition:all .2s; }
+  .wp-step.ativo .num { background:var(--primaria); border-color:var(--primaria); color:#fff; }
+  .wp-step.feito .num { background:var(--sucesso); border-color:var(--sucesso); color:#fff; }
+  .wp-step.ativo { color:var(--texto); }
+  .wp-step.feito { color:var(--sucesso); }
+  .wp-linha { flex:1; height:2px; background:var(--borda); margin:0 6px; min-width:16px; transition:background .2s; }
+  .wp-linha.feita { background:var(--sucesso); }
+
+  /* Step panels */
+  .passo { display:none; }
+  .passo.ativo { display:block; }
+  .passo-titulo { font-size:1.1rem; font-weight:700; margin-bottom:4px; }
+  .passo-sub { font-size:.82rem; color:var(--texto-muted); margin-bottom:20px; }
+
+  /* Nav buttons */
+  .wizard-nav { display:flex; gap:10px; justify-content:space-between; margin-top:24px; padding-top:20px; border-top:1px solid var(--borda); }
+
+  /* Breakdown sidebar */
+  .breakdown { position:sticky; top:20px; }
+  .breakdown-linha { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--borda); font-size:.85rem; }
+  .breakdown-linha:last-child { border-bottom:none; }
+  .breakdown-linha.total { font-weight:700; font-size:1rem; padding-top:12px; border-bottom:none; }
+  .breakdown-linha.venda { font-size:1.15rem; font-weight:800; color:var(--primaria); padding-top:12px; border-top:2px solid var(--primaria); margin-top:4px; }
+  .breakdown-zero { color:var(--borda); }
+  .breakdown-val { font-weight:600; font-family:monospace; }
+
+  /* Tipo cards */
+  .tipo-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+  /* Livro componentes */
+  .livro-comp { border:1px solid var(--borda); border-radius:10px; padding:14px 16px; margin-bottom:10px; background:var(--card-bg); }
+  .livro-comp-resumo { padding:10px 14px; background:rgba(16,185,129,.07); border:1px solid rgba(16,185,129,.25); border-radius:8px; margin-top:10px; font-size:.83rem; display:flex; gap:20px; flex-wrap:wrap; }
+  .tipo-card { border:2px solid var(--borda); border-radius:10px; padding:16px; cursor:pointer; transition:all .15s; text-align:center; }
+  .tipo-card:hover { border-color:var(--primaria); }
+  .tipo-card.selecionado { border-color:var(--primaria); background:rgba(233,69,96,.08); }
+  .tipo-card i { display:block; margin:0 auto 8px; width:28px; height:28px; }
+  .tipo-card span { font-weight:600; font-size:.88rem; display:block; }
+  .tipo-card small { color:var(--texto-muted); font-size:.75rem; }
+
+  /* Formato de impressão */
+  .formato-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px; }
+  .formato-card { border:1.5px solid var(--borda); border-radius:8px; padding:10px 6px; cursor:pointer; text-align:center; transition:all .15s; }
+  .formato-card:hover { border-color:var(--primaria); }
+  .formato-card.selecionado { border-color:var(--primaria); background:rgba(233,69,96,.08); }
+  .formato-card .fn { font-weight:700; font-size:.9rem; }
+  .formato-card .fd { font-size:.68rem; color:var(--texto-muted); margin-top:2px; }
+  .formato-preview { padding:12px 16px; background:rgba(59,130,246,.06); border:1px solid rgba(59,130,246,.3); border-radius:8px; font-size:.85rem; margin-top:10px; }
+
+  /* Imposição preview */
+  .imposicao-box { padding:12px 16px; background:rgba(16,185,129,.08); border:1px solid rgba(16,185,129,.3); border-radius:8px; font-size:.85rem; }
+  .imposicao-num { font-size:1.5rem; font-weight:800; color:var(--sucesso); }
+
+  /* Acabamento checkboxes */
+  .acab-item { display:flex; align-items:flex-start; gap:12px; padding:12px; border:1px solid var(--borda); border-radius:8px; margin-bottom:8px; transition:border-color .15s; }
+  .acab-item.ativo { border-color:var(--primaria); background:rgba(233,69,96,.04); }
+  .acab-item input[type=checkbox] { width:18px; height:18px; margin-top:2px; accent-color:var(--primaria); cursor:pointer; flex-shrink:0; }
+  .acab-params { display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--borda); }
+  .acab-params.visivel { display:block; }
+
+  /* Markup slider */
+  .markup-display { font-size:2.5rem; font-weight:800; color:var(--primaria); text-align:center; line-height:1; }
+  .markup-sub { text-align:center; font-size:.8rem; color:var(--texto-muted); margin-top:4px; }
+  input[type=range] { width:100%; accent-color:var(--primaria); }
+
+  /* Resultado final */
+  .resultado-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:20px; }
+  .resultado-box { background:var(--fundo); border-radius:10px; padding:16px; text-align:center; }
+  .resultado-box .val { font-size:1.4rem; font-weight:800; }
+  .resultado-box .label { font-size:.75rem; color:var(--texto-muted); margin-top:4px; }
+  .resultado-box.destaque { background:rgba(233,69,96,.1); border:1px solid var(--primaria); }
+  .resultado-box.destaque .val { color:var(--primaria); }
+
+  /* Tabela de preços */
+  .tabela-precos { width:100%; border-collapse:collapse; font-size:.88rem; }
+  .tabela-precos th { padding:8px 12px; text-align:right; color:var(--texto-muted); font-size:.78rem; font-weight:600; border-bottom:2px solid var(--borda); }
+  .tabela-precos th:first-child { text-align:left; }
+  .tabela-precos td { padding:8px 12px; text-align:right; border-bottom:1px solid var(--borda); }
+  .tabela-precos td:first-child { text-align:left; font-weight:600; }
+  .tabela-precos tr.atual { background:rgba(233,69,96,.06); }
+  .tabela-precos tr.atual td { color:var(--primaria); font-weight:700; }
+
+  /* Ações finais */
+  .acoes-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .acao-btn { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1.5px solid var(--borda); border-radius:10px; cursor:pointer; background:var(--card-bg); transition:all .15s; text-decoration:none; color:var(--texto); }
+  .acao-btn:hover { border-color:var(--primaria); background:rgba(233,69,96,.04); }
+  .acao-btn i { width:20px; height:20px; color:var(--primaria); flex-shrink:0; }
+  .acao-btn-titulo { font-weight:600; font-size:.88rem; }
+  .acao-btn-sub { font-size:.75rem; color:var(--texto-muted); }
+</style>
+
+<!-- PROGRESS BAR -->
+<div class="wizard-progress" id="wizard-progress">
+  <div class="wp-step ativo" id="wp1"><div class="num">1</div><span>Produto</span></div>
+  <div class="wp-linha" id="wl1"></div>
+  <div class="wp-step" id="wp2"><div class="num">2</div><span>Material</span></div>
+  <div class="wp-linha" id="wl2"></div>
+  <div class="wp-step" id="wp3"><div class="num">3</div><span>Impressão</span></div>
+  <div class="wp-linha" id="wl3"></div>
+  <div class="wp-step" id="wp4"><div class="num">4</div><span>Acabamentos</span></div>
+  <div class="wp-linha" id="wl4"></div>
+  <div class="wp-step" id="wp5"><div class="num">5</div><span>Setup & M.O.</span></div>
+  <div class="wp-linha" id="wl5"></div>
+  <div class="wp-step" id="wp6"><div class="num">6</div><span>Resultado</span></div>
+</div>
+
+<div class="calc-layout">
+  <!-- MAIN WIZARD -->
+  <div>
+    <!-- ══ PASSO 1: PRODUTO ══ -->
+    <div class="passo ativo card" id="passo-1">
+      <div class="card-body">
+        <div class="passo-titulo">Qual produto vamos calcular?</div>
+        <div class="passo-sub">Informe o tipo, as dimensões e a quantidade.</div>
+
+        <div class="form-group mb-16">
+          <label>Nome do produto (para salvar depois)</label>
+          <input type="text" id="p1_nome" class="form-control" placeholder="Ex: Cartão de Visita 9x5cm 4x4">
+        </div>
+
+        <div class="form-group mb-16">
+          <label>Tipo de impressão</label>
+          <div class="tipo-grid">
+            <div class="tipo-card selecionado" onclick="selecionarTipo('papel', this)">
+              <i data-lucide="layers"></i>
+              <span>Papel Impresso</span>
+              <small>Toner digital, flyer, cartão, folder, apostila</small>
+            </div>
+            <div class="tipo-card" onclick="selecionarTipo('m2', this)">
+              <i data-lucide="maximize-2"></i>
+              <span>Flexíveis</span>
+              <small>Banner, adesivo, lona, UV plano — custo por m²</small>
+            </div>
+            <div class="tipo-card" onclick="selecionarTipo('livro', this)">
+              <i data-lucide="book-open"></i>
+              <span>Encadernados</span>
+              <small>Miolo + Capa, múltiplos componentes</small>
+            </div>
+            <div class="tipo-card" onclick="selecionarTipo('acrilico', this)">
+              <i data-lucide="box"></i>
+              <span>Acrílico UV</span>
+              <small>Chapas com impressão UV plana</small>
+            </div>
+            <div class="tipo-card" onclick="selecionarTipo('apostila', this)">
+              <i data-lucide="book-marked"></i>
+              <span>Apostilas</span>
+              <small>Miolo impresso + capa plástica ou impressa</small>
+            </div>
+          </div>
+        </div>
+
+        {% set papeis_fixos = papeis | selectattr('tamanho_fixo', 'equalto', 1) | list %}
+        {% if papeis_fixos %}
+        <div class="form-group mb-16" id="atalhos-fixos-wrap">
+          <label style="margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            <i data-lucide="zap" style="width:14px;height:14px;color:var(--primaria);"></i>
+            Atalhos — Papéis Fixos
+            <span style="font-size:.74rem;color:var(--texto-muted);font-weight:400;">clique para preencher automaticamente</span>
+          </label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            {% for p in papeis_fixos %}
+            <button type="button" class="atalho-papel-btn"
+              onclick="atalhoFixo({{ p.id }})"
+              style="border:1.5px solid var(--borda);border-radius:8px;padding:8px 14px;cursor:pointer;background:var(--card-bg);transition:all .15s;text-align:left;color:var(--texto);"
+              data-papel-id="{{ p.id }}">
+              <div style="font-weight:700;font-size:.88rem;">{{ p.nome }}</div>
+              <div style="font-size:.74rem;color:var(--texto-muted);margin-top:2px;">{{ p.largura }}×{{ p.altura }} cm</div>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="form-grid form-grid-3 mb-8">
+          <div class="form-group">
+            <label id="label-p1-larg">Largura final (cm)</label>
+            <input type="number" id="p1_larg" class="form-control" step="0.1" placeholder="9" oninput="recalcular()">
+          </div>
+          <div class="form-group">
+            <label id="label-p1-alt">Altura final (cm)</label>
+            <input type="number" id="p1_alt" class="form-control" step="0.1" placeholder="5" oninput="recalcular()">
+          </div>
+          <div class="form-group">
+            <label>Quantidade</label>
+            <input type="number" id="p1_qtd" class="form-control" step="1" placeholder="1000" oninput="recalcular()">
+          </div>
+        </div>
+        <!-- Número de páginas — só para apostila -->
+        <div id="p1_apostila_pag_row" style="display:none;margin-bottom:12px;">
+          <div class="form-group" style="max-width:200px;">
+            <label style="display:flex;align-items:center;gap:6px;">
+              <i data-lucide="file-text" style="width:14px;height:14px;color:var(--primaria);"></i>
+              Número de páginas
+            </label>
+            <input type="number" id="p1_apostila_pag" class="form-control" step="2" min="2" placeholder="Ex: 20" oninput="recalcular()">
+          </div>
+          <div id="p1_apostila_info" style="display:none;padding:8px 12px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.25);border-radius:8px;font-size:.82rem;color:var(--sucesso);margin-top:4px;"></div>
+        </div>
+
+        <!-- Aviso de papel fixo no passo 1 -->
+        <div id="p1_fixo_banner" style="display:none;margin-bottom:8px;padding:8px 12px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3);border-radius:8px;font-size:.82rem;color:#818CF8;">
+          📐 Dimensões definidas pelo papel selecionado — vá para o passo 2 para alterar.
+        </div>
+
+        <!-- só aparece para m² -->
+        <div id="p1_m2_info" style="display:none;">
+          <div class="imposicao-box" style="background:rgba(245,166,35,.08);border-color:rgba(245,166,35,.3);">
+            <div style="font-size:.8rem;color:var(--texto-muted);margin-bottom:4px">Área calculada</div>
+            <div><span class="imposicao-num" id="p1_area_calc">0,00</span> <span style="font-size:.9rem;color:var(--texto-muted)">m²</span></div>
+          </div>
+        </div>
+
+        <div class="wizard-nav">
+          <div></div>
+          <button class="btn btn-primario" onclick="tentarAvancar(st.papel && st.papel.tamanho_fixo ? 3 : 2, 1)">
+            Próximo <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PASSO 2: MATERIAL ══ -->
+    <div class="passo card" id="passo-2">
+      <div class="card-body">
+        <div class="passo-titulo">Qual o material?</div>
+        <div class="passo-sub" id="p2_sub">Selecione o papel e o sistema calculará a imposição automática.</div>
+
+        <!-- Papel impresso -->
+        <div id="p2_papel">
+          <div class="form-group mb-16">
+            <label>Papel / Substrato</label>
+            <select id="p2_papel_sel" class="form-control" onchange="selecionarPapel()">
+              <option value="">— Selecione o papel —</option>
+              {% for p in papeis %}
+              <option value="{{ p.id }}"
+                data-larg="{{ p.largura }}" data-alt="{{ p.altura }}"
+                data-resma="{{ p.custo_resma }}" data-folhas="{{ p.folhas_resma }}"
+                data-perda="{{ p.fator_perda }}" data-nome="{{ p.nome }}"
+                data-fixo="{{ p.tamanho_fixo or 0 }}">
+                {{ p.nome }} — {{ p.largura }}×{{ p.altura }}cm{% if p.tamanho_fixo %} [FIXO]{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Aviso de tamanho fixo -->
+          <div id="p2_fixo_notice" style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.3);border-radius:8px;font-size:.85rem;">
+            <strong style="color:#818CF8;">📐 Tamanho fixo</strong> — papel comprado já cortado no tamanho final.
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;">
+              <div>
+                <span style="font-size:.72rem;color:var(--texto-muted);display:block;margin-bottom:2px;">Dimensões do produto</span>
+                <strong id="p2_fixo_formato" style="font-size:1.1rem;color:#818CF8;">—</strong>
+              </div>
+              <div>
+                <span style="font-size:.72rem;color:var(--texto-muted);display:block;margin-bottom:2px;">1 folha = 1 peça</span>
+                <strong style="color:var(--sucesso);">✓ sem imposição</strong>
+              </div>
+              <div>
+                <span style="font-size:.72rem;color:var(--texto-muted);display:block;margin-bottom:2px;">Custo por folha</span>
+                <strong id="p2_fixo_custo" style="color:var(--primaria);">R$ 0,0000</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seletor de formato (aparece após escolher o papel) -->
+          <div id="p2_formato_wrap" style="display:none;margin-bottom:16px;">
+            <div class="form-group mb-8">
+              <label>Formato de impressão</label>
+              <small class="text-muted" style="display:block;margin-top:-2px;">Qual o tamanho da folha que vai entrar na máquina?</small>
+            </div>
+            <div class="formato-grid" id="formato-grid"><!-- gerado via JS --></div>
+            <div id="p2_formato_custom" style="display:none;margin-top:8px;">
+              <div class="form-grid form-grid-2">
+                <div class="form-group">
+                  <label style="font-size:.8rem;">Largura (cm)</label>
+                  <input type="number" id="p2_formato_larg" class="form-control" step="0.1" placeholder="33" oninput="selecionarFormatoCustom()">
+                </div>
+                <div class="form-group">
+                  <label style="font-size:.8rem;">Altura (cm)</label>
+                  <input type="number" id="p2_formato_alt" class="form-control" step="0.1" placeholder="48" oninput="selecionarFormatoCustom()">
+                </div>
+              </div>
+            </div>
+            <div id="p2_formato_preview" class="formato-preview" style="display:none;">
+              <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:4px;">Rendimento da resma</div>
+              <div>
+                <span id="p2_formatos_por_resma" style="font-size:1.4rem;font-weight:800;color:#3B82F6;">0</span>
+                <span style="font-size:.85rem;color:var(--texto-muted);"> folhas <strong id="p2_formato_nome_label">F4</strong> por folha de resma</span>
+              </div>
+              <div style="margin-top:6px;font-size:.82rem;">
+                Custo por folha de impressão: <strong id="p2_custo_folha_formato" style="color:var(--primaria)">R$ 0,0000</strong>
+              </div>
+            </div>
+          </div>
+
+          <div id="p2_imposicao_box" style="display:none;margin-bottom:16px;">
+            <div class="imposicao-box">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                  <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:2px">Peças por folha</div>
+                  <div><span class="imposicao-num" id="p2_pecas_num">0</span> <span style="font-size:.85rem;color:var(--texto-muted)" id="p2_orient_txt"></span></div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:2px">Folhas necessárias</div>
+                  <div class="imposicao-num" id="p2_folhas_num">0</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:2px">Com perda</div>
+                  <div class="imposicao-num" id="p2_folhas_perda_num">0</div>
+                </div>
+              </div>
+              <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(16,185,129,.2);font-size:.8rem;">
+                Custo de papel: <strong id="p2_custo_papel">R$ 0,00</strong>
+                (R$ <span id="p2_custo_folha">0,0000</span>/folha)
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Fator de perda (%) <small class="text-muted">— opcional</small></label>
+            <input type="number" id="p2_perda" class="form-control" step="0.5" placeholder="0" style="max-width:100px;" oninput="recalcular()">
+            <small class="text-muted">Deixe vazio para não aplicar perda.</small>
+          </div>
+        </div>
+
+        <!-- Livro / Apostila -->
+        <div id="p2_livro" style="display:none;">
+          <div style="margin-bottom:12px;font-size:.85rem;color:var(--texto-muted);">Configure o papel, formato e máquina de cada componente. O sistema soma os custos automaticamente.</div>
+          <div id="livro-comp-lista"><!-- gerado via JS --></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+            <button type="button" class="btn btn-secundario" onclick="addComponente('miolo')">
+              <i data-lucide="plus"></i> Miolo
+            </button>
+            <button type="button" class="btn btn-secundario" onclick="addComponente('capa_impressa')">
+              <i data-lucide="plus"></i> Capa Impressa
+            </button>
+            <button type="button" class="btn btn-secundario" onclick="addComponente('capa_dura')">
+              <i data-lucide="plus"></i> Capa Dura (Papelão)
+            </button>
+          </div>
+        </div>
+
+        <!-- m² -->
+        <div id="p2_m2" style="display:none;">
+          <div class="imposicao-box" style="background:rgba(245,166,35,.08);border-color:rgba(245,166,35,.3);">
+            <div style="font-size:.82rem;margin-bottom:8px;color:var(--texto-muted)">Área a imprimir</div>
+            <div style="font-size:1.4rem;font-weight:800;color:var(--secundaria)" id="p2_m2_area">0,00 m²</div>
+          </div>
+          <div class="form-group mt-12">
+            <label>Fator de perda / margem extra (%)</label>
+            <input type="number" id="p2_perda_m2" class="form-control" step="0.5" placeholder="0" style="max-width:120px;" oninput="recalcular()">
+          </div>
+          {% if midias_bobina %}
+          <div class="form-group mt-12">
+            <label>Mídia em Bobina <small class="text-muted">(opcional — adiciona custo de material)</small></label>
+            <select id="p2_midia_sel" class="form-control" onchange="selecionarMidia()">
+              <option value="">— Nenhuma (material já incluso na máquina) —</option>
+              {% for m in midias_bobina %}
+              <option value="{{ m.id }}" data-custo="{{ m.custo_m2 }}" data-nome="{{ m.nome }}">
+                {{ m.nome }} — R$ {{ "%.2f"|format(m.custo_m2) }}/m²
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div id="p2_midia_preview" style="display:none;padding:8px 12px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:.83rem;margin-top:6px;">
+            Custo da mídia: <strong id="p2_midia_custo_total" style="color:var(--sucesso)">R$ 0,00</strong>
+            &nbsp;·&nbsp; <span id="p2_midia_custo_m2" style="color:var(--texto-muted)">R$ 0,00/m²</span>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Acrílico UV -->
+        <div id="p2_acrilico" style="display:none;">
+          {% if acrilicos %}
+          <div class="form-group mb-12">
+            <label>Chapa de Acrílico</label>
+            <select id="p2_acril_sel" class="form-control" onchange="selecionarChapa()">
+              <option value="">— Selecione a chapa —</option>
+              {% for a in acrilicos %}
+              <option value="{{ a.id }}"
+                data-larg="{{ a.largura_cm }}" data-alt="{{ a.altura_cm }}"
+                data-esp="{{ a.espessura_mm }}" data-cor="{{ a.cor }}"
+                data-custo="{{ a.custo }}" data-nome="{{ a.nome }}">
+                {{ a.nome }} — {{ a.largura_cm }}×{{ a.altura_cm }}cm · {{ a.espessura_mm }}mm · {{ a.cor }} — R$ {{ "%.2f"|format(a.custo) }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% else %}
+          <div style="padding:12px 16px;background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.3);border-radius:8px;font-size:.85rem;margin-bottom:12px;">
+            ⚠️ Nenhuma chapa cadastrada. <a href="{{ url_for('prec_configuracoes') }}#acrilicos">Cadastrar chapas →</a>
+          </div>
+          {% endif %}
+
+          <div id="p2_acril_imposicao" style="display:none;margin-bottom:16px;">
+            <div class="imposicao-box">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                <div>
+                  <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:2px">Peças por chapa</div>
+                  <div><span class="imposicao-num" id="p2_acril_pecas">0</span> <span style="font-size:.75rem;color:var(--texto-muted)" id="p2_acril_orient"></span></div>
+                </div>
+                <div>
+                  <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:2px">Chapas necessárias</div>
+                  <span class="imposicao-num" id="p2_acril_chapas">0</span>
+                </div>
+                <div>
+                  <div style="font-size:.78rem;color:var(--texto-muted);margin-bottom:2px">Custo chapas</div>
+                  <strong id="p2_acril_custo_chapa" style="color:var(--primaria)">R$ 0,00</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Corte -->
+          <div style="padding:12px 14px;background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:8px;margin-bottom:12px;">
+            <div style="font-size:.78rem;font-weight:700;color:#F5A623;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;">Serviço de Corte</div>
+            <div class="form-group mb-8">
+              <label style="font-size:.82rem;">Equipamento de corte</label>
+              <select id="p2_acril_maq_corte" class="form-control" onchange="selecionarMaqCorte()">
+                <option value="">— Sem corte / terceirizado —</option>
+                {% for mc in maquinas_corte %}
+                <option value="{{ mc.id }}" data-hora="{{ mc.custo_hora }}" data-nome="{{ mc.nome }}">
+                  {{ mc.nome }} — R$ {{ "%.2f"|format(mc.custo_hora) }}/h
+                </option>
+                {% endfor %}
+                <option value="fixo">Custo fixo por peça</option>
+              </select>
+            </div>
+            <div id="p2_acril_corte_tempo" style="display:none;">
+              <div class="form-grid form-grid-2">
+                <div class="form-group" style="margin:0;">
+                  <label style="font-size:.82rem;">Tempo por peça (min)</label>
+                  <input type="number" id="p2_acril_min_peca" class="form-control" step="0.1" placeholder="0,0" oninput="recalcular()">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label style="font-size:.82rem;">Custo por peça calculado</label>
+                  <div id="p2_acril_corte_calc" style="padding:8px 12px;background:var(--fundo);border-radius:6px;font-weight:700;color:var(--primaria);font-size:.9rem;">R$ 0,0000</div>
+                </div>
+              </div>
+            </div>
+            <div id="p2_acril_corte_fixo" style="display:none;">
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:.82rem;">Custo fixo por peça (R$)</label>
+                <input type="number" id="p2_acril_corte" class="form-control" step="0.01" placeholder="0,00"
+                  value="{{ acrilico_corte_peca }}" oninput="recalcular()" style="max-width:180px;">
+              </div>
+            </div>
+          </div>
+
+          <div id="p2_acril_resumo" style="display:none;margin-top:14px;padding:12px 16px;background:rgba(233,69,96,.06);border:1px solid rgba(233,69,96,.2);border-radius:8px;font-size:.85rem;">
+            <div style="font-weight:700;margin-bottom:8px;color:var(--primaria)">Resumo de custos</div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;">
+              <div><span class="text-muted" style="font-size:.75rem;display:block;">Chapas</span><strong id="p2_acril_r_chapa">R$ 0,00</strong></div>
+              <div><span class="text-muted" style="font-size:.75rem;display:block;">Corte</span><strong id="p2_acril_r_corte">R$ 0,00</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wizard-nav">
+          <button class="btn btn-secundario" onclick="irParaPasso(1)"><i data-lucide="arrow-left"></i> Voltar</button>
+          <button class="btn btn-primario" onclick="tentarAvancar(st.tipo === 'livro' ? 4 : 3, 2)">Próximo <i data-lucide="arrow-right"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PASSO 3: IMPRESSÃO ══ -->
+    <div class="passo card" id="passo-3">
+      <div class="card-body">
+        <div class="passo-titulo">Como será impressa?</div>
+        <div class="passo-sub">Selecione a máquina e o tipo de impressão.</div>
+
+        <div id="p3_filtro_label" style="display:none;margin-bottom:12px;padding:8px 12px;border-radius:6px;font-size:0.82rem;font-weight:600;"></div>
+
+        <div class="form-group mb-16">
+          <label>Máquina / Equipamento</label>
+          <select id="p3_maq_sel" class="form-control" onchange="selecionarMaquina()">
+            <option value="">— Selecione a máquina —</option>
+            {% for m in maquinas %}
+            <option value="{{ m.id }}"
+              data-tipo="{{ m.tipo }}"
+              data-boca="{{ m.boca_cm }}"
+              data-toner="{{ m.custo_click_toner }}"
+              data-manut="{{ m.custo_click_manutencao }}"
+              data-deprec="{{ m.custo_click_depreciacao }}"
+              data-clickpb="{{ m.custo_click_pb or 0 }}"
+              data-clickcor="{{ m.custo_click_cor or 0 }}"
+              data-mat="{{ m.custo_m2_material }}"
+              data-imp="{{ m.custo_m2_impressao }}"
+              data-dep2="{{ m.custo_m2_depreciacao }}"
+              data-branco="{{ m.custo_m2_branco or 0 }}"
+              data-verniz="{{ m.custo_m2_verniz or 0 }}"
+              data-nome="{{ m.nome }}">
+              {{ m.nome }} — {% if m.tipo == 'click' %}R$ {{ "%.4f"|format(m.custo_click_toner + m.custo_click_manutencao + m.custo_click_depreciacao) }}/click{% else %}R$ {{ "%.2f"|format(m.custo_m2_material + m.custo_m2_impressao + m.custo_m2_depreciacao) }}/m²{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Só para toner/click -->
+        <div id="p3_click_opts">
+          <div class="form-group mb-16">
+            <label>Tipo de impressão</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="tipo-card selecionado" onclick="selecionarLados(1, this)" id="btn-4x0">
+                <span style="font-size:1.1rem;font-weight:800;">4×0</span>
+                <small>Só frente</small>
+              </div>
+              <div class="tipo-card" onclick="selecionarLados(2, this)" id="btn-4x4">
+                <span style="font-size:1.1rem;font-weight:800;">4×4</span>
+                <small>Frente e verso</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seletor P&B / Cor (aparece só se a máquina tiver custo diferenciado) -->
+          <div id="p3_cor_wrap" style="display:none;margin-bottom:16px;">
+            <label style="font-size:.82rem;font-weight:600;margin-bottom:8px;display:block;">Tipo de cores</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+              <div class="tipo-card" onclick="selecionarTipoCor('pb', this)" id="btn-cor-pb">
+                <span style="font-size:1rem;font-weight:800;">P&B</span>
+                <small>Preto e branco</small>
+              </div>
+              <div class="tipo-card selecionado" onclick="selecionarTipoCor('cor', this)" id="btn-cor-cor">
+                <span style="font-size:1rem;font-weight:800;">Colorida</span>
+                <small>100% cor</small>
+              </div>
+              <div class="tipo-card" onclick="selecionarTipoCor('mista', this)" id="btn-cor-mista">
+                <span style="font-size:1rem;font-weight:800;">Mista</span>
+                <small>Parte P&B + Cor</small>
+              </div>
+            </div>
+            <div id="p3_pct_cor_wrap" style="display:none;">
+              <label style="font-size:.8rem;color:var(--texto-muted);">% de páginas coloridas: <strong id="p3_pct_cor_label">50%</strong></label>
+              <input type="range" id="p3_pct_cor_range" min="5" max="95" step="5" value="50"
+                oninput="document.getElementById('p3_pct_cor_label').textContent=this.value+'%'; st.pctCor=parseInt(this.value); recalcular();"
+                style="width:100%;margin-top:4px;">
+            </div>
+          </div>
+
+          <div id="p3_click_preview" style="display:none;" class="imposicao-box">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="font-size:.78rem;color:var(--texto-muted)">Clicks por folha</div>
+                <div class="imposicao-num" id="p3_clicks_folha">0</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:.78rem;color:var(--texto-muted)">Total de clicks</div>
+                <div class="imposicao-num" id="p3_clicks_total">0</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:.78rem;color:var(--texto-muted)">Custo impressão</div>
+                <div style="font-size:1.2rem;font-weight:800;color:var(--primaria)" id="p3_custo_imp">R$ 0,00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Opções branco/verniz — só para acrílico UV com máquina m2 -->
+        <div id="p3_acril_uv_opts" style="display:none;margin-bottom:12px;">
+          <div style="font-size:.82rem;font-weight:700;color:#A78BFA;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;">Tintas especiais desta impressão</div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px;">
+            <input type="checkbox" id="p3_acril_branco_ck" onchange="recalcular()" style="width:18px;height:18px;accent-color:var(--primaria);">
+            <span style="font-weight:600;font-size:.9rem;">Tinta Branca (underbase)</span>
+            <span id="p3_acril_branco_rate" style="margin-left:auto;font-size:.78rem;color:var(--texto-muted);"></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <input type="checkbox" id="p3_acril_verniz_ck" onchange="recalcular()" style="width:18px;height:18px;accent-color:var(--primaria);">
+            <span style="font-weight:600;font-size:.9rem;">Verniz Localizado</span>
+            <span id="p3_acril_verniz_rate" style="margin-left:auto;font-size:.78rem;color:var(--texto-muted);"></span>
+          </label>
+        </div>
+
+        <!-- Para m² -->
+        <div id="p3_m2_preview" style="display:none;" class="imposicao-box" style="background:rgba(245,166,35,.08);border-color:rgba(245,166,35,.3);">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:.78rem;color:var(--texto-muted)">Área total (com perda)</div>
+              <div class="imposicao-num" id="p3_area_total" style="color:var(--secundaria)">0,00 m²</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:.78rem;color:var(--texto-muted)">Custo total impressão</div>
+              <div style="font-size:1.2rem;font-weight:800;color:var(--primaria)" id="p3_custo_m2">R$ 0,00</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wizard-nav">
+          <button class="btn btn-secundario" onclick="irParaPasso(st.papel && st.papel.tamanho_fixo ? 1 : 2)"><i data-lucide="arrow-left"></i> Voltar</button>
+          <button class="btn btn-primario" onclick="tentarAvancar(st.tipo === 'acrilico' ? 5 : 4, 3)">Próximo <i data-lucide="arrow-right"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PASSO 4: ACABAMENTOS ══ -->
+    <div class="passo card" id="passo-4">
+      <div class="card-body">
+        <div class="passo-titulo">Acabamentos e processos</div>
+        <div class="passo-sub">Selecione os processos que serão realizados. Cada um tem seu próprio markup.</div>
+
+        <!-- Nota laminação (visível em modo livro) -->
+        <div id="nota-laminacao-livro" style="display:none;margin-bottom:16px;padding:10px 14px;background:rgba(59,130,246,.06);border-radius:8px;border:1px solid rgba(59,130,246,.2);font-size:.83rem;color:var(--texto-muted);">
+          A <strong>laminação</strong> para Encadernados é configurada por componente no <strong>passo 2</strong>.
+        </div>
+
+        <!-- Wire-O (visível para Encadernados e Apostilas) -->
+        <div id="p4_wireo" style="display:none;margin-bottom:20px;padding:14px 18px;background:rgba(59,130,246,.06);border-radius:8px;border:1.5px solid rgba(59,130,246,.25);">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <input type="checkbox" id="wireo_ativo" style="width:16px;height:16px;cursor:pointer;" onchange="toggleWireo(this)">
+            <label for="wireo_ativo" style="font-weight:700;font-size:.95rem;cursor:pointer;">🔩 Encadernação Wire-O / Espiral</label>
+          </div>
+          <div id="wireo_params" style="display:none;">
+            {% set wireos = acabamentos | selectattr('tipo', 'equalto', 'wireo') | list if acabamentos else [] %}
+            {% if wireos %}
+            <div class="form-grid form-grid-2" style="margin-bottom:8px;">
+              <div class="form-group">
+                <label style="font-size:.8rem;">Tipo de Wire-O</label>
+                <select class="form-control" id="wireo_tipo_sel" onchange="recalcularWireo()">
+                  <option value="">— Selecione —</option>
+                  {% for w in wireos %}
+                  <option value="{{ w.id }}" data-custo-anel="{{ w.custo_base }}" data-markup="{{ w.markup }}">
+                    {{ w.nome }} — R$ {{ "%.4f"|format(w.custo_base) }}/anel
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group">
+                <label style="font-size:.8rem;">Anéis por produto</label>
+                <input type="number" id="wireo_aneis_prod" class="form-control" value="16" step="1" oninput="recalcularWireo()">
+              </div>
+            </div>
+            <div style="font-size:.8rem;color:var(--texto-muted);" id="wireo_preview">—</div>
+            {% else %}
+            <p class="text-muted text-sm">Nenhum Wire-O cadastrado. <a href="{{ url_for('prec_configuracoes') }}#acabamentos" style="color:var(--primaria)">Cadastrar agora</a></p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Capa Apostila (visível apenas para Apostilas) -->
+        <div id="p4_capa_apostila" style="display:none;margin-bottom:20px;padding:14px 18px;background:rgba(16,185,129,.05);border-radius:8px;border:1.5px solid rgba(16,185,129,.2);">
+          <div style="font-weight:700;font-size:.95rem;margin-bottom:12px;color:var(--sucesso);">📗 Capa da Apostila</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+            <div class="tipo-card" id="capa-tipo-nenhuma" onclick="selecionarCapaTipo('nenhuma', this)" style="padding:10px 6px;">
+              <span style="font-size:.9rem;font-weight:800;">Nenhuma</span>
+              <small>Sem capa</small>
+            </div>
+            <div class="tipo-card" id="capa-tipo-plastico" onclick="selecionarCapaTipo('plastico', this)" style="padding:10px 6px;">
+              <span style="font-size:.9rem;font-weight:800;">Plástica</span>
+              <small>Custo fixo/unidade</small>
+            </div>
+            <div class="tipo-card selecionado" id="capa-tipo-impressa" onclick="selecionarCapaTipo('impressa', this)" style="padding:10px 6px;">
+              <span style="font-size:.9rem;font-weight:800;">Impressa</span>
+              <small>Papel + impressão</small>
+            </div>
+          </div>
+
+          <!-- Plástica -->
+          <div id="capa_plastico_info" style="display:none;padding:10px 14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:.85rem;">
+            Custo unitário configurado: <strong id="capa_plastico_unit_display">R$ 0,00</strong>
+            &nbsp;·&nbsp; Total: <strong id="capa_plastico_total_display" style="color:var(--sucesso)">R$ 0,00</strong>
+            <div style="font-size:.75rem;color:var(--texto-muted);margin-top:4px;">
+              Altere em <a href="{{ url_for('prec_configuracoes') }}#apostilas" style="color:var(--primaria)">Configurações → Apostilas</a>
+            </div>
+          </div>
+
+          <!-- Impressa -->
+          <div id="capa_impressa_opts" style="display:block;">
+            <div class="form-grid form-grid-2 mb-8">
+              <div class="form-group">
+                <label style="font-size:.82rem;">Papel da Capa</label>
+                <select id="capa_papel_sel" class="form-control" onchange="selecionarCapaPapel()">
+                  <option value="">— Selecione o papel —</option>
+                  {% for p in papeis %}
+                  <option value="{{ p.id }}"
+                    data-larg="{{ p.largura }}" data-alt="{{ p.altura }}"
+                    data-resma="{{ p.custo_resma }}" data-folhas="{{ p.folhas_resma }}"
+                    data-perda="{{ p.fator_perda }}" data-nome="{{ p.nome }}"
+                    data-fixo="{{ p.tamanho_fixo or 0 }}">
+                    {{ p.nome }} — {{ p.largura }}×{{ p.altura }}cm
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group">
+                <label style="font-size:.82rem;">Máquina da Capa</label>
+                <select id="capa_maq_sel" class="form-control" onchange="recalcular()">
+                  <option value="">— Selecione a máquina —</option>
+                  {% for m in maquinas %}
+                  {% if m.tipo == 'click' %}
+                  <option value="{{ m.id }}"
+                    data-tipo="{{ m.tipo }}"
+                    data-boca="{{ m.boca_cm }}"
+                    data-toner="{{ m.custo_click_toner }}"
+                    data-manut="{{ m.custo_click_manutencao }}"
+                    data-deprec="{{ m.custo_click_depreciacao }}"
+                    data-nome="{{ m.nome }}">
+                    {{ m.nome }} — R$ {{ "%.4f"|format(m.custo_click_toner + m.custo_click_manutencao + m.custo_click_depreciacao) }}/click
+                  </option>
+                  {% endif %}
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div id="capa_formato_wrap" style="display:none;margin-bottom:10px;">
+              <label style="font-size:.8rem;color:var(--texto-muted);">Formato de impressão da capa</label>
+              <div id="capa_formato_grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;"></div>
+            </div>
+
+            <div id="capa_imposicao_box" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:.83rem;">
+              <span class="text-muted">Peças/folha:</span> <strong id="capa_pecas_num">0</strong>
+              &nbsp;·&nbsp; <span class="text-muted">Folhas c/ perda:</span> <strong id="capa_folhas_num">0</strong>
+              &nbsp;·&nbsp; <span class="text-muted">Custo papel capa:</span> <strong id="capa_custo_papel_display" style="color:var(--sucesso)">R$ 0,00</strong>
+            </div>
+
+            <!-- Impressão 4x0 / 4x4 -->
+            <div id="capa_lados_wrap" style="display:none;margin-bottom:10px;">
+              <label style="font-size:.8rem;color:var(--texto-muted);">Impressão da capa</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+                <div class="tipo-card selecionado" id="capa-btn-4x0" onclick="selecionarCapaLados(1, this)" style="padding:8px 6px;">
+                  <span style="font-size:.9rem;font-weight:800;">4×0</span><small>Só frente</small>
+                </div>
+                <div class="tipo-card" id="capa-btn-4x4" onclick="selecionarCapaLados(2, this)" style="padding:8px 6px;">
+                  <span style="font-size:.9rem;font-weight:800;">4×4</span><small>Frente e verso</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Laminação -->
+            <div id="capa_lam_wrap" style="display:none;margin-top:10px;">
+              <label style="font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
+                <input type="checkbox" id="capa_lam_ck" onchange="toggleCapaLaminacao(this)">
+                Laminação na capa
+              </label>
+              <div id="capa_lam_params" style="display:none;margin-top:8px;padding:10px;background:rgba(59,130,246,.06);border-radius:6px;border:1px solid rgba(59,130,246,.2);">
+                {% set bobinas = acabamentos | selectattr('tipo', 'equalto', 'bobina') | list if acabamentos else [] %}
+                {% if bobinas %}
+                <div class="form-group" style="margin:0 0 8px 0;">
+                  <label style="font-size:.78rem;">Bobina de Laminação</label>
+                  <select class="form-control" id="capa_lam_sel" onchange="recalcular()">
+                    <option value="">— Selecionar Bobina —</option>
+                    {% for b in bobinas %}
+                    <option value="{{ b.id }}"
+                      data-larg="{{ b.bobina_largura }}" data-comp="{{ b.bobina_comprimento }}"
+                      data-custo="{{ b.bobina_custo }}" data-markup="{{ b.markup }}">
+                      {{ b.nome }} — {{ b.bobina_largura }}cm × {{ b.bobina_comprimento }}m
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div style="display:flex;gap:16px;">
+                  <label style="font-size:.82rem;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                    <input type="radio" name="capa-lam-lados" value="1" checked onchange="recalcular()"> 1 lado
+                  </label>
+                  <label style="font-size:.82rem;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                    <input type="radio" name="capa-lam-lados" value="2" onchange="recalcular()"> 2 lados
+                  </label>
+                </div>
+                {% else %}
+                <p style="font-size:.8rem;color:var(--texto-muted);margin:0;">Nenhuma bobina cadastrada. <a href="{{ url_for('prec_configuracoes') }}#acabamentos">Cadastrar</a></p>
+                {% endif %}
+              </div>
+            </div>
+
+            <div id="capa_impressa_resumo" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(233,69,96,.06);border:1px solid rgba(233,69,96,.2);border-radius:8px;font-size:.83rem;">
+              Custo total da capa impressa: <strong id="capa_impressa_total_display" style="color:var(--primaria)">R$ 0,00</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Espiral Apostila -->
+        <div id="p4_espiral_apostila" style="display:none;margin-bottom:20px;padding:14px 18px;background:rgba(245,158,11,.05);border-radius:8px;border:1.5px solid rgba(245,158,11,.2);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="espiral_ativo" style="width:16px;height:16px;cursor:pointer;" onchange="toggleEspiral(this)">
+            <label for="espiral_ativo" style="font-weight:700;font-size:.95rem;cursor:pointer;">🌀 Espiral</label>
+          </div>
+          <div id="espiral_info" style="display:none;margin-top:10px;padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:.85rem;">
+            Custo unitário configurado: <strong id="espiral_unit_display">R$ 0,00</strong>
+            &nbsp;·&nbsp; Total: <strong id="espiral_total_display" style="color:#d97706;">R$ 0,00</strong>
+            <div style="font-size:.75rem;color:var(--texto-muted);margin-top:4px;">
+              Altere em <a href="{{ url_for('prec_configuracoes') }}#apostilas" style="color:var(--primaria)">Configurações → Apostilas</a>
+            </div>
+          </div>
+        </div>
+
+        {% if acabamentos or acabamentos_uv %}
+          {% for a in acabamentos %}
+          <div class="acab-item" id="acab-wrap-{{ a.id }}" data-tipo="{{ a.tipo }}" data-categoria="papel">
+            <input type="checkbox" id="acab-cb-{{ a.id }}"
+              data-id="{{ a.id }}" data-nome="{{ a.nome }}"
+              data-tipo="{{ a.tipo }}"
+              data-custo="{{ a.custo_base }}"
+              data-markup="{{ a.markup }}"
+              data-bob-larg="{{ a.bobina_largura }}"
+              data-bob-comp="{{ a.bobina_comprimento }}"
+              data-bob-custo="{{ a.bobina_custo }}"
+              data-unidade="{{ a.unidade }}"
+              onchange="toggleAcabamento(this)">
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <label for="acab-cb-{{ a.id }}" style="font-weight:600;cursor:pointer;">{{ a.nome }}</label>
+                <span class="tipo-badge tipo-{{ a.tipo }}" style="font-size:.68rem;">
+                  {{ 'bobina' if a.tipo=='bobina' else 'hora/min' if a.tipo=='hora' else 'por unidade' if a.tipo=='unidade' else 'job fixo' }}
+                </span>
+              </div>
+              <div style="font-size:.78rem;color:var(--texto-muted);margin-top:2px;">
+                {% if a.tipo == 'bobina' %}
+                  Bobina {{ a.bobina_largura }}cm × {{ a.bobina_comprimento }}m — R$ {{ "%.2f"|format(a.bobina_custo) }} · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% elif a.tipo == 'hora' %}
+                  R$ {{ "%.2f"|format(a.custo_base) }}/hora · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% elif a.tipo == 'unidade' %}
+                  R$ {{ "%.4f"|format(a.custo_base) }}/{{ a.unidade }} · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% else %}
+                  R$ {{ "%.2f"|format(a.custo_base) }}/job · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% endif %}
+              </div>
+
+              <div class="acab-params" id="acab-params-{{ a.id }}">
+                {% if a.tipo == 'hora' %}
+                <div class="form-group" style="max-width:200px;margin-top:0;">
+                  <label style="font-size:.8rem;">Tempo no job (minutos)</label>
+                  <input type="number" id="acab-min-{{ a.id }}" class="form-control" step="1" value="10"
+                    oninput="recalcular()" placeholder="ex: 15">
+                </div>
+                {% elif a.tipo == 'unidade' %}
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                  <div class="form-group" style="max-width:180px;margin-top:0;">
+                    <label style="font-size:.8rem;">Qtd por produto final</label>
+                    <input type="number" id="acab-qtd-{{ a.id }}" class="form-control" step="1" value="1"
+                      oninput="recalcular()" placeholder="ex: 1">
+                  </div>
+                  <div class="form-group" style="max-width:180px;margin-top:0;">
+                    <label style="font-size:.8rem;">Preço/{{ a.unidade or 'und' }} (R$)</label>
+                    <input type="number" id="acab-preco-{{ a.id }}" class="form-control" step="0.01"
+                      value="{{ a.custo_base }}" oninput="recalcular()" placeholder="0.00">
+                  </div>
+                </div>
+                {% elif a.tipo == 'bobina' %}
+                <div style="display:flex;align-items:center;gap:16px;padding:6px 0;flex-wrap:wrap;">
+                  <span style="font-size:.8rem;color:var(--texto-muted);">Lados:</span>
+                  <label style="font-size:.85rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="radio" name="acab-lados-{{ a.id }}" id="acab-lados1-{{ a.id }}"
+                      value="1" checked onchange="recalcular()"> 1 lado
+                  </label>
+                  <label style="font-size:.85rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="radio" name="acab-lados-{{ a.id }}" id="acab-lados2-{{ a.id }}"
+                      value="2" onchange="recalcular()"> 2 lados (custo dobra)
+                  </label>
+                </div>
+                {% else %}
+                <div style="font-size:.8rem;color:var(--texto-muted);padding:6px 0;">
+                  Custo fixo aplicado automaticamente.
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+          {% for a in acabamentos_uv %}
+          <div class="acab-item" id="acab-wrap-{{ a.id }}" data-tipo="{{ a.tipo }}" data-categoria="uv_eco" style="display:none;">
+            <input type="checkbox" id="acab-cb-{{ a.id }}"
+              data-id="{{ a.id }}" data-nome="{{ a.nome }}"
+              data-tipo="{{ a.tipo }}"
+              data-custo="{{ a.custo_base }}"
+              data-markup="{{ a.markup }}"
+              data-bob-larg="{{ a.bobina_largura }}"
+              data-bob-comp="{{ a.bobina_comprimento }}"
+              data-bob-custo="{{ a.bobina_custo }}"
+              data-unidade="{{ a.unidade }}"
+              onchange="toggleAcabamento(this)">
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <label for="acab-cb-{{ a.id }}" style="font-weight:600;cursor:pointer;">{{ a.nome }}</label>
+                <span class="tipo-badge tipo-{{ a.tipo }}" style="font-size:.68rem;">
+                  {{ 'bobina' if a.tipo=='bobina' else 'hora/min' if a.tipo=='hora' else 'por unidade' if a.tipo=='unidade' else 'job fixo' }}
+                </span>
+              </div>
+              <div style="font-size:.78rem;color:var(--texto-muted);margin-top:2px;">
+                {% if a.tipo == 'bobina' %}
+                  Bobina {{ a.bobina_largura }}cm × {{ a.bobina_comprimento }}m — R$ {{ "%.2f"|format(a.bobina_custo) }} · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% elif a.tipo == 'hora' %}
+                  R$ {{ "%.2f"|format(a.custo_base) }}/hora · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% elif a.tipo == 'unidade' %}
+                  R$ {{ "%.4f"|format(a.custo_base) }}/{{ a.unidade }} · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% else %}
+                  R$ {{ "%.2f"|format(a.custo_base) }}/job · Markup ×{{ "%.1f"|format(a.markup) }}
+                {% endif %}
+              </div>
+              <div class="acab-params" id="acab-params-{{ a.id }}">
+                {% if a.tipo == 'hora' %}
+                <div class="form-group" style="max-width:200px;margin-top:0;">
+                  <label style="font-size:.8rem;">Tempo no job (minutos)</label>
+                  <input type="number" id="acab-min-{{ a.id }}" class="form-control" step="1" value="10"
+                    oninput="recalcular()" placeholder="ex: 15">
+                </div>
+                {% elif a.tipo == 'unidade' %}
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                  <div class="form-group" style="max-width:180px;margin-top:0;">
+                    <label style="font-size:.8rem;">Qtd por produto final</label>
+                    <input type="number" id="acab-qtd-{{ a.id }}" class="form-control" step="1" value="1"
+                      oninput="recalcular()" placeholder="ex: 1">
+                  </div>
+                  <div class="form-group" style="max-width:180px;margin-top:0;">
+                    <label style="font-size:.8rem;">Preço/{{ a.unidade or 'und' }} (R$)</label>
+                    <input type="number" id="acab-preco-{{ a.id }}" class="form-control" step="0.01"
+                      value="{{ a.custo_base }}" oninput="recalcular()" placeholder="0.00">
+                  </div>
+                </div>
+                {% elif a.tipo == 'bobina' %}
+                <div style="display:flex;align-items:center;gap:16px;padding:6px 0;flex-wrap:wrap;">
+                  <span style="font-size:.8rem;color:var(--texto-muted);">Lados:</span>
+                  <label style="font-size:.85rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="radio" name="acab-lados-{{ a.id }}" id="acab-lados1-{{ a.id }}"
+                      value="1" checked onchange="recalcular()"> 1 lado
+                  </label>
+                  <label style="font-size:.85rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="radio" name="acab-lados-{{ a.id }}" id="acab-lados2-{{ a.id }}"
+                      value="2" onchange="recalcular()"> 2 lados (custo dobra)
+                  </label>
+                </div>
+                {% else %}
+                <div style="font-size:.8rem;color:var(--texto-muted);padding:6px 0;">
+                  Custo fixo aplicado automaticamente.
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="vazio"><p>Nenhum acabamento cadastrado. <a href="{{ url_for('prec_configuracoes') }}#acabamentos" style="color:var(--primaria)">Cadastrar agora</a></p></div>
+        {% endif %}
+
+        <div class="wizard-nav">
+          <button class="btn btn-secundario" onclick="irParaPasso(st.tipo === 'livro' ? 2 : 3)"><i data-lucide="arrow-left"></i> Voltar</button>
+          <button class="btn btn-primario" onclick="irParaPasso(5)">Próximo <i data-lucide="arrow-right"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PASSO 5: SETUP & M.O. ══ -->
+    <div class="passo card" id="passo-5">
+      <div class="card-body">
+        <div class="passo-titulo">Setup e Mão de Obra</div>
+        <div class="passo-sub">Custo fixo de preparação e tempo de operador.</div>
+
+        <div class="form-grid form-grid-2 mb-16">
+          <div class="form-group">
+            <label>Custo de Setup / Arranque (R$)</label>
+            <input type="number" id="p5_setup" class="form-control" step="0.01" value="15.00"
+              placeholder="15,00" oninput="recalcular()">
+            <small class="text-muted">Preparação do arquivo, imposição, acerto de máquina.</small>
+          </div>
+          <div class="form-group">
+            <label>Tempo de produção estimado (minutos)</label>
+            <input type="number" id="p5_mo_min" class="form-control" step="1" value="20"
+              placeholder="20" oninput="recalcular()">
+            <small class="text-muted">Taxa: R$ {{ mo_taxa }}/min — M.O. calculada automaticamente.</small>
+          </div>
+        </div>
+
+        <div style="padding:12px 16px;background:var(--fundo);border-radius:8px;font-size:.85rem;display:flex;gap:24px;">
+          <div>
+            <span class="text-muted">Custo Setup:</span>
+            <strong id="p5_preview_setup">R$ 0,00</strong>
+          </div>
+          <div>
+            <span class="text-muted">Custo M.O.:</span>
+            <strong id="p5_preview_mo">R$ 0,00</strong>
+          </div>
+          <div>
+            <span class="text-muted">Subtotal:</span>
+            <strong id="p5_preview_sub" style="color:var(--primaria)">R$ 0,00</strong>
+          </div>
+        </div>
+
+        <div class="wizard-nav">
+          <button class="btn btn-secundario" onclick="irParaPasso(4)"><i data-lucide="arrow-left"></i> Voltar</button>
+          <button class="btn btn-primario" onclick="irParaPasso(6)">Ver Resultado <i data-lucide="arrow-right"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PASSO 6: RESULTADO ══ -->
+    <div class="passo card" id="passo-6">
+      <div class="card-body">
+        <div class="passo-titulo">Resultado e Markup</div>
+        <div class="passo-sub">Ajuste o markup e veja o preço final.</div>
+
+        <!-- Markup -->
+        <div style="text-align:center;margin-bottom:24px;">
+          <div class="markup-display" id="r_markup_display">× 2.5</div>
+          <div class="markup-sub">markup sobre custo total</div>
+          <input type="range" id="r_markup_range" min="1.0" max="10.0" step="0.1" value="2.5"
+            oninput="atualizarMarkup(this.value)" style="margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--texto-muted);margin-top:4px;">
+            <span>×1.0 (0%)</span><span>×2.0 (50%)</span><span>×3.0 (67%)</span><span>×5.0 (80%)</span><span>×10.0 (90%)</span>
+          </div>
+          <div style="margin-top:12px;">
+            <label style="font-size:.82rem;color:var(--texto-muted);">Ou digitar diretamente:</label>
+            <input type="number" id="r_markup_input" class="form-control" step="0.1" value="2.5"
+              style="max-width:120px;display:inline-block;margin-left:8px;" oninput="atualizarMarkupInput(this.value)">
+          </div>
+          <div style="margin-top:14px;padding:10px 14px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:8px;display:inline-flex;align-items:center;gap:10px;">
+            <label style="font-size:.82rem;color:var(--texto-muted);white-space:nowrap;">🎯 Meta de margem:</label>
+            <input type="number" id="r_meta_margem" class="form-control" step="0.5" min="1" max="99" value=""
+              placeholder="ex: 50" style="max-width:90px;display:inline-block;" oninput="atualizarMetaMargem(this.value)">
+            <span style="font-size:.82rem;color:var(--texto-muted);">%</span>
+            <span style="font-size:.78rem;color:var(--texto-muted);" id="r_meta_margem_hint"></span>
+          </div>
+        </div>
+
+        <!-- Resultado principal -->
+        <div class="resultado-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+          <div class="resultado-box">
+            <div class="val" id="r_custo_total">R$ 0,00</div>
+            <div class="label">Custo Total</div>
+          </div>
+          <div class="resultado-box destaque">
+            <div class="val" id="r_preco_venda">R$ 0,00</div>
+            <div class="label">Preço de Venda</div>
+          </div>
+          <div class="resultado-box">
+            <div class="val" id="r_preco_unit">R$ 0,00</div>
+            <div class="label">Preço por Unidade</div>
+          </div>
+          <div class="resultado-box">
+            <div class="val" id="r_custo_unit" style="font-size:1.1rem;">R$ 0,00</div>
+            <div class="label">Custo por Unidade</div>
+          </div>
+        </div>
+
+        <!-- Margem -->
+        <div style="text-align:center;margin-bottom:12px;font-size:.85rem;color:var(--texto-muted);">
+          Margem de lucro: <strong id="r_margem" style="color:var(--sucesso)">0%</strong>
+          &nbsp;·&nbsp; Lucro: <strong id="r_lucro" style="color:var(--sucesso)">R$ 0,00</strong>
+        </div>
+
+        <!-- Investimento Contínuo -->
+        <div id="r_invest_row" style="display:none;margin-bottom:20px;padding:12px 16px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.25);border-radius:8px;">
+          <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#818CF8;margin-bottom:10px;">📈 Cálculo de Investimento Contínuo</div>
+          <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+            <div id="r_invest_custo_bloco">
+              <div style="font-size:.75rem;color:var(--texto-muted);">Inv. sobre o custo (<span id="r_invest_pct_cfg">0</span>%)</div>
+              <div style="font-size:1.1rem;font-weight:800;color:#818CF8;" id="r_invest_valor">R$ 0,00</div>
+              <div style="font-size:.72rem;color:var(--texto-muted);">representa <span id="r_invest_pct">0%</span> da venda</div>
+            </div>
+            <div id="r_invest_venda_bloco" style="display:none;">
+              <div style="font-size:.75rem;color:var(--texto-muted);">Inv. sobre a venda (<span id="r_invest_venda_pct_cfg">0</span>%)</div>
+              <div style="font-size:1.1rem;font-weight:800;color:#818CF8;" id="r_invest_venda_valor">R$ 0,00</div>
+              <div style="font-size:.72rem;color:var(--texto-muted);">representa <span id="r_invest_venda_pct_venda">0%</span> da venda</div>
+            </div>
+            <div id="r_invest_total_bloco" style="display:none;padding-left:16px;border-left:2px solid rgba(99,102,241,.4);">
+              <div style="font-size:.75rem;color:var(--texto-muted);">Total investimento</div>
+              <div style="font-size:1.2rem;font-weight:800;color:#818CF8;" id="r_invest_total_valor">R$ 0,00</div>
+              <div style="font-size:.72rem;color:var(--texto-muted);"><span id="r_invest_total_pct">0%</span> do valor de venda</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabela por quantidade -->
+        <div style="margin-bottom:20px;">
+          <div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.5px;color:var(--texto-muted);font-weight:700;margin-bottom:10px;">
+            Tabela de preços por quantidade
+          </div>
+          <table class="tabela-precos" id="r_tabela_qtd"></table>
+        </div>
+
+        <!-- Ações -->
+        <div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.5px;color:var(--texto-muted);font-weight:700;margin-bottom:10px;">
+          O que fazer com este cálculo?
+        </div>
+        <div class="acoes-grid">
+          <button class="acao-btn" onclick="salvarOrcamento()">
+            <i data-lucide="file-plus"></i>
+            <div><div class="acao-btn-titulo">Salvar como Orçamento</div><div class="acao-btn-sub">Vincula a um cliente</div></div>
+          </button>
+          <button class="acao-btn" onclick="salvarProduto()">
+            <i data-lucide="package-plus"></i>
+            <div><div class="acao-btn-titulo">Salvar como Produto</div><div class="acao-btn-sub">Tabela de preços no catálogo</div></div>
+          </button>
+          <button class="acao-btn" onclick="imprimirFicha()">
+            <i data-lucide="printer"></i>
+            <div><div class="acao-btn-titulo">Imprimir Ficha de Custo</div><div class="acao-btn-sub">PDF com breakdown completo</div></div>
+          </button>
+          <button class="acao-btn" onclick="copiarWhatsApp()">
+            <i data-lucide="message-circle"></i>
+            <div><div class="acao-btn-titulo">Copiar para WhatsApp</div><div class="acao-btn-sub">Mensagem formatada para cliente</div></div>
+          </button>
+          <button class="acao-btn" onclick="novoCalculo()">
+            <i data-lucide="refresh-cw"></i>
+            <div><div class="acao-btn-titulo">Novo Cálculo</div><div class="acao-btn-sub">Começar do zero</div></div>
+          </button>
+          <button class="acao-btn" onclick="salvarHistorico()">
+            <i data-lucide="save"></i>
+            <div><div class="acao-btn-titulo">Salvar no Histórico</div><div class="acao-btn-sub">Consultar depois</div></div>
+          </button>
+          <button class="acao-btn" onclick="adicionarAoCarrinho()" style="border-color:var(--sucesso);grid-column:span 2;">
+            <i data-lucide="shopping-cart" style="color:var(--sucesso)"></i>
+            <div><div class="acao-btn-titulo" style="color:var(--sucesso);">Adicionar ao Carrinho</div><div class="acao-btn-sub">Continua calculando — gera orçamento no final</div></div>
+          </button>
+          <button class="acao-btn" onclick="adicionarECalcularProximo()" style="border-color:#6366f1;grid-column:span 2;">
+            <i data-lucide="plus-circle" style="color:#6366f1"></i>
+            <div><div class="acao-btn-titulo" style="color:#6366f1;">Adicionar e Calcular Próximo Produto</div><div class="acao-btn-sub">Adiciona ao carrinho e volta ao início da calculadora</div></div>
+          </button>
+        </div>
+
+        <div class="wizard-nav">
+          <button class="btn btn-secundario" onclick="irParaPasso(5)"><i data-lucide="arrow-left"></i> Voltar</button>
+          <div></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /main -->
+
+  <!-- BREAKDOWN SIDEBAR -->
+  <div class="breakdown card" style="padding:0;">
+    <div class="card-header"><h3 style="font-size:.9rem;">Breakdown de Custo</h3></div>
+    <div class="card-body" style="padding:12px 16px;">
+      <div class="breakdown-linha">
+        <span class="text-muted">📄 Papel/Material</span>
+        <span class="breakdown-val" id="bd_papel">—</span>
+      </div>
+      <div class="breakdown-linha">
+        <span class="text-muted">🖨️ Impressão</span>
+        <span class="breakdown-val" id="bd_impressao">—</span>
+      </div>
+      <div id="bd_acabamentos_lista">
+        <!-- preenchido via JS -->
+      </div>
+      <div class="breakdown-linha" id="bd_laminacao_row" style="display:none;">
+        <span class="text-muted">Laminação</span>
+        <span class="breakdown-val" id="bd_laminacao">—</span>
+      </div>
+      <div class="breakdown-linha" id="bd_capadura_row" style="display:none;">
+        <span class="text-muted">Capa Dura</span>
+        <span class="breakdown-val" id="bd_capadura">—</span>
+      </div>
+      <div class="breakdown-linha" id="bd_wireo_row" style="display:none;">
+        <span class="text-muted">🔩 Wire-O</span>
+        <span class="breakdown-val" id="bd_wireo">—</span>
+      </div>
+      <div class="breakdown-linha" id="bd_espiral_apostila_row" style="display:none;">
+        <span class="text-muted">🌀 Espiral</span>
+        <span class="breakdown-val" id="bd_espiral_apostila">—</span>
+      </div>
+      <div class="breakdown-linha" id="bd_capa_apostila_row" style="display:none;">
+        <span class="text-muted">📗 Capa Apostila</span>
+        <span class="breakdown-val" id="bd_capa_apostila">—</span>
+      </div>
+      <div class="breakdown-linha">
+        <span class="text-muted">⚙️ Setup</span>
+        <span class="breakdown-val" id="bd_setup">—</span>
+      </div>
+      <div class="breakdown-linha">
+        <span class="text-muted">👷 M.O.</span>
+        <span class="breakdown-val" id="bd_mo">—</span>
+      </div>
+      <div class="breakdown-linha total">
+        <span>Custo Total</span>
+        <span class="breakdown-val" id="bd_total">R$ 0,00</span>
+      </div>
+      <div class="breakdown-linha" id="bd_overhead_row" style="display:none;">
+        <span class="text-muted" style="font-size:.8rem;">📈 Inv. Contínuo (<span id="bd_overhead_pct">0</span>%)</span>
+        <span class="breakdown-val" style="font-size:.85rem;" id="bd_overhead">R$ 0,00</span>
+      </div>
+      <div class="breakdown-linha" id="bd_custo_final_row" style="display:none;">
+        <span style="font-weight:700;font-size:.88rem;">Custo c/ Investimento</span>
+        <span class="breakdown-val" style="font-size:.9rem;font-weight:700;" id="bd_custo_final">R$ 0,00</span>
+      </div>
+      <div class="breakdown-linha" style="padding:6px 0;border-bottom:none;">
+        <span class="text-muted" style="font-size:.8rem;">Markup</span>
+        <span style="font-size:.85rem;font-weight:700;color:var(--secundaria);" id="bd_markup">× 2.5</span>
+      </div>
+      <div class="breakdown-linha" id="bd_invest_venda_row" style="display:none;">
+        <span class="text-muted" style="font-size:.8rem;">📈 Inv. s/ Venda (<span id="bd_invest_venda_pct">0</span>%)</span>
+        <span class="breakdown-val" style="font-size:.85rem;" id="bd_invest_venda">R$ 0,00</span>
+      </div>
+      <div class="breakdown-linha venda">
+        <span>Venda</span>
+        <span class="breakdown-val" id="bd_venda">R$ 0,00</span>
+      </div>
+      <div class="breakdown-linha" style="border:none;padding-top:4px;">
+        <span class="text-muted" style="font-size:.78rem;">Por unidade</span>
+        <span style="font-size:.82rem;font-weight:600;" id="bd_unit">R$ 0,00</span>
+      </div>
+      <div class="breakdown-linha" id="bd_por_pagina_row" style="display:none;border:none;padding-top:2px;">
+        <span class="text-muted" style="font-size:.78rem;">📄 Por página</span>
+        <span style="font-size:.82rem;font-weight:600;color:var(--secundaria);" id="bd_por_pagina">0,0 ¢</span>
+      </div>
+      <div class="breakdown-linha" style="border:none;padding-top:4px;">
+        <span class="text-muted" style="font-size:.78rem;">Margem</span>
+        <span style="font-size:.82rem;font-weight:600;color:var(--sucesso);" id="bd_margem">0%</span>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modal Salvar como Produto -->
+<div id="modal-salvar-produto" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h3>Salvar como Produto</h3>
+      <button type="button" class="modal-fechar" onclick="document.getElementById('modal-salvar-produto').style.display='none'">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <div class="form-grid form-grid-2 mb-16">
+        <div class="form-group">
+          <label>Nome do Produto</label>
+          <input type="text" id="modal-prod-nome" class="form-control" placeholder="Nome no catálogo">
+        </div>
+        <div class="form-group">
+          <label>Unidade</label>
+          <select id="modal-prod-unidade" class="form-control">
+            <option value="UN">UN (unidade)</option>
+            <option value="KIT">KIT</option>
+            <option value="CX">CX (caixa)</option>
+            <option value="PC">PC (pacote)</option>
+            <option value="M2">M²</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--texto-muted);margin-bottom:10px;">Tabela de preços gerada</div>
+      <div id="modal-prod-faixas-preview"></div>
+      <p class="text-muted" style="font-size:.8rem;margin-top:10px;">O produto será salvo no catálogo com estas faixas. Você pode editar depois em Produtos.</p>
+    </div>
+    <div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--borda);display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn btn-secundario" onclick="document.getElementById('modal-salvar-produto').style.display='none'">Cancelar</button>
+      <button type="button" class="btn btn-primario" onclick="confirmarSalvarProduto()"><i data-lucide="save"></i> Salvar no Catálogo</button>
+    </div>
+  </div>
+</div>
+
+<!-- CARRINHO FLUTUANTE -->
+<div id="carrinho_bar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:var(--card-bg);border-top:2px solid var(--sucesso);box-shadow:0 -4px 20px rgba(0,0,0,.3);padding:12px 24px;">
+  <div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:200px;">
+      <div style="font-size:.8rem;color:var(--texto-muted);">🛒 Carrinho de Orçamento</div>
+      <div id="carrinho_resumo_txt" style="font-weight:700;font-size:.95rem;">0 itens</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-secundario" onclick="verCarrinho()" style="font-size:.85rem;">
+        <i data-lucide="list"></i> Ver Itens
+      </button>
+      <button class="btn" onclick="limparCarrinho()" style="font-size:.85rem;background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.3);">
+        <i data-lucide="trash-2"></i>
+      </button>
+      <button class="btn btn-primario" onclick="gerarOrcamentoCarrinho()" style="font-size:.9rem;">
+        <i data-lucide="file-plus"></i> Gerar Orçamento
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ver Carrinho -->
+<div id="modal-carrinho" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header">
+      <h3>🛒 Carrinho de Orçamento</h3>
+      <button type="button" class="modal-fechar" onclick="document.getElementById('modal-carrinho').style.display='none'">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <div id="modal-carrinho-lista"></div>
+    </div>
+    <div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--borda);display:flex;gap:10px;justify-content:space-between;align-items:center;">
+      <div id="modal-carrinho-total" style="font-weight:700;font-size:1rem;"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-secundario" onclick="document.getElementById('modal-carrinho').style.display='none'">Fechar</button>
+        <button class="btn btn-primario" onclick="gerarOrcamentoCarrinho()"><i data-lucide="file-plus"></i> Gerar Orçamento</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MO_TAXA = {{ mo_taxa|float }};
+const OVERHEAD_PCT = {{ overhead_pct|float }};
+const INVEST_VENDA_PCT = {{ invest_venda_pct|float }};
+const APOSTILA_CAPA_PLASTICO_CUSTO = {{ apostila_capa_plastico_custo|float }};
+const APOSTILA_ESPIRAL_FAIXAS = {{ apostila_espiral_faixas | tojson }};
+function getCustoEspiral(paginas) {
+  if (!APOSTILA_ESPIRAL_FAIXAS || !APOSTILA_ESPIRAL_FAIXAS.length) return 0;
+  const sorted = [...APOSTILA_ESPIRAL_FAIXAS].sort((a, b) => a.ate - b.ate);
+  for (const f of sorted) { if (paginas <= f.ate) return f.custo; }
+  return sorted[sorted.length - 1].custo;
+}
+const PAPEIS_DATA = {{ papeis | tojson }};
+const MAQUINAS_DATA = {{ maquinas | tojson }};
+const ACABAMENTOS_DATA = {{ acabamentos | tojson if acabamentos else '[]' }};
+const ACABAMENTOS_UV_DATA = {{ acabamentos_uv | tojson if acabamentos_uv else '[]' }};
+const PAPELAO_DATA = {{ papelao | tojson if papelao else '[]' }};
+const WIREO_DATA = ACABAMENTOS_DATA.filter(a => a.tipo === 'wireo');
+const BOBINAS_DATA = ACABAMENTOS_DATA.filter(a => a.tipo === 'bobina');
+
+// ── Estado global ─────────────────────────────────────────────────────────────
+const MIDIAS_BOBINA_DATA = {{ midias_bobina | tojson if midias_bobina else '[]' }};
+const ACRILICOS_DATA    = {{ acrilicos | tojson if acrilicos else '[]' }};
+const MAQ_CORTE_DATA    = {{ maquinas_corte | tojson if maquinas_corte else '[]' }};
+
+const st = {
+  passo: 1,
+  tipo: 'papel',       // 'papel' | 'm2' | 'livro' | 'acrilico' | 'apostila'
+  nome: '',
+  larg: 0, alt: 0, qtd: 0,
+  // papel
+  papel: null,
+  formato: null,
+  perda: 5,
+  pecasPorFolha: 0,
+  folhasLiq: 0,
+  folhasTotal: 0,
+  custoPapel: 0,
+  // impressao
+  maquina: null,
+  lados: 1,
+  clicksFolha: 0,
+  clicksTotal: 0,
+  custoImpressao: 0,
+  // m2
+  areaBruta: 0,
+  custoM2: 0,
+  midia: null,
+  custoMidia: 0,
+  // acrilico
+  acrilico: null,
+  acrilicoPecasPorChapa: 0,
+  acrilicoChapassNecessarias: 0,
+  acrilicoCustoChapa: 0,
+  acrilicoCustoUV: 0,
+  acrilicoCustoBranco: 0,
+  acrilicoCustoVerniz: 0,
+  acrilicoCustoCorte: 0,
+  // livro
+  componentes: [
+    {id:0, nome:'Miolo', tipo:'miolo', papelId:'', papel:null, formatoNome:'', formato:null, maqId:'', maquina:null, lados:2,
+     paginas:100, folhasDireto:1, miolosPorFolha:1, perda:5,
+     temLaminacao:false, laminacaoAcabId:null, laminacaoBobinaLarg:0, laminacaoBobinaCusto:0, laminacaoBobinaComp:0, laminacaoMarkup:2.0, laminacaoLados:1,
+     papelaoId:null, tamanhoId:null, papalaoQtdPorEx:2,
+     custoPapel:0, custoImp:0, custoLaminacao:0, custoCapaDura:0, custo:0},
+    {id:1, nome:'Capa',  tipo:'capa_impressa', papelId:'', papel:null, formatoNome:'', formato:null, maqId:'', maquina:null, lados:1,
+     paginas:4,   folhasDireto:1, perda:5,
+     temLaminacao:false, laminacaoAcabId:null, laminacaoBobinaLarg:0, laminacaoBobinaCusto:0, laminacaoBobinaComp:0, laminacaoMarkup:2.0, laminacaoLados:1,
+     papelaoId:null, tamanhoId:null, papalaoQtdPorEx:2,
+     custoPapel:0, custoImp:0, custoLaminacao:0, custoCapaDura:0, custo:0},
+  ],
+  nextCompId: 2,
+  wireo: { ativo: false, acabId: null, custo_anel: 0, markup: 2.0, aneis_produto: 16 },
+  espiralAtivo: false,
+  custoWireo: 0,
+  // apostila
+  apostilaPaginas: 20,
+  apostilaCapa: {
+    tipo: 'impressa',   // 'nenhuma' | 'plastico' | 'impressa'
+    custoPlasticoUnit: APOSTILA_CAPA_PLASTICO_CUSTO,
+    papel: null, formato: null, lados: 1, perda: 5,
+    maquina: null, pecasPorFolha: 0, folhasTotal: 0,
+    temLaminacao: false, laminacaoAcabId: null, laminacaoBobinaLarg: 0,
+    laminacaoBobinaCusto: 0, laminacaoBobinaComp: 0, laminacaoMarkup: 2.0, laminacaoLados: 1,
+    custoPapel: 0, custoImp: 0, custoLaminacao: 0, custoTotal: 0,
+  },
+  // acabamentos
+  acabSel: {},
+  custoAcab: {},
+  // setup/mo
+  setup: 15,
+  moMin: 20,
+  // impressão click
+  pctCor: 100,
+  // totais
+  custoTotal: 0,
+  markup: 2.5,
+  precoVenda: 0,
+};
+
+// ── Navegação entre passos ────────────────────────────────────────────────────
+function validarPasso(from) {
+  const erros = [];
+  if (from === 1) {
+    if (!st.tipo) erros.push('Selecione o tipo de produto.');
+    if (!st.qtd || st.qtd <= 0) erros.push('Informe a quantidade.');
+    if (st.tipo === 'apostila' && (!st.apostilaPaginas || st.apostilaPaginas <= 0))
+      erros.push('Informe o número de páginas da apostila.');
+  }
+  if (from === 2) {
+    if (st.tipo === 'papel' || st.tipo === 'apostila') {
+      if (!st.papel) erros.push('Selecione o papel.');
+      if (!st.formato) erros.push('Selecione o formato.');
+    }
+    if (st.tipo === 'm2' && !st.maquina) erros.push('Selecione a máquina UV/Eco.');
+  }
+  if (from === 3) {
+    if ((st.tipo === 'papel' || st.tipo === 'apostila') && !st.maquina)
+      erros.push('Selecione a impressora.');
+  }
+  return erros;
+}
+
+function tentarAvancar(destino, from) {
+  const erros = validarPasso(from);
+  const errId = 'erro-passo-' + from;
+  let errEl = document.getElementById(errId);
+  if (erros.length) {
+    if (!errEl) {
+      errEl = document.createElement('div');
+      errEl.id = errId;
+      errEl.style.cssText = 'color:#ef4444;font-size:.83rem;margin-top:8px;padding:8px 12px;background:rgba(239,68,68,.08);border-radius:6px;border:1px solid rgba(239,68,68,.3);';
+      const nav = document.querySelector('#passo-' + from + ' .wizard-nav');
+      if (nav) nav.parentNode.insertBefore(errEl, nav);
+    }
+    errEl.textContent = '⚠ ' + erros.join(' ');
+    errEl.style.display = 'block';
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
+  irParaPasso(destino);
+}
+
+function irParaPasso(n) {
+  document.querySelectorAll('.passo').forEach(p => p.classList.remove('ativo'));
+  document.getElementById('passo-' + n).classList.add('ativo');
+  for (let i = 1; i <= 6; i++) {
+    const wp = document.getElementById('wp' + i);
+    const wl = document.getElementById('wl' + (i - 1));
+    if (i < n) { wp.className = 'wp-step feito'; if (wl) wl.classList.add('feita'); }
+    else if (i === n) { wp.className = 'wp-step ativo'; }
+    else { wp.className = 'wp-step'; if (wl) wl.classList.remove('feita'); }
+  }
+  st.passo = n;
+  if (n === 6) gerarTabelaQuantidades();
+  window.scrollTo(0, 0);
+  lucide.createIcons();
+}
+
+// ── Tipo de produto ───────────────────────────────────────────────────────────
+function filtrarAcabamentosPorTipo(tipo) {
+  document.querySelectorAll('.acab-item').forEach(el => {
+    const cat = el.dataset.categoria;
+    const tipoAcab = el.dataset.tipo;
+    let show = false;
+    if (tipo === 'acrilico') {
+      show = false;
+    } else if (tipo === 'm2') {
+      show = cat === 'uv_eco';
+    } else if (tipo === 'livro') {
+      show = cat === 'papel' && tipoAcab !== 'bobina' && tipoAcab !== 'wireo';
+    } else if (tipo === 'apostila') {
+      // apostila: mesmos de papel, exceto wireo (tratado separado) e bobina (laminação na capa separada)
+      show = cat === 'papel' && tipoAcab !== 'wireo' && tipoAcab !== 'bobina';
+    } else {
+      show = cat === 'papel';
+    }
+    el.style.display = show ? '' : 'none';
+  });
+}
+
+function filtrarMaquinas(tipoCalc) {
+  const sel = document.getElementById('p3_maq_sel');
+  let countVis = 0;
+  Array.from(sel.options).forEach(opt => {
+    if (!opt.value) return;
+    const tm = opt.dataset.tipo;
+    let vis = false;
+    if (tipoCalc === 'papel' || tipoCalc === 'livro' || tipoCalc === 'apostila') vis = tm === 'click';
+    else if (tipoCalc === 'm2') vis = tm === 'm2' || tm === 'bobina';
+    else if (tipoCalc === 'acrilico') vis = tm === 'm2';
+    opt.style.display = vis ? '' : 'none';
+    if (vis) countVis++;
+  });
+  sel.value = '';
+  st.maquina = null;
+  document.getElementById('p3_click_opts').style.display = 'none';
+  document.getElementById('p3_m2_preview').style.display = 'none';
+
+  // Visual label
+  const lbl = document.getElementById('p3_filtro_label');
+  if (!lbl) return;
+  const labelMap = {
+    papel:    { text: `Impressoras de papel / toner (${countVis} disponível${countVis!==1?'s':''})`, bg: '#1E3A5F', color: '#60A5FA' },
+    livro:    { text: `Impressoras de papel / toner (${countVis} disponível${countVis!==1?'s':''})`, bg: '#1E3A5F', color: '#60A5FA' },
+    apostila: { text: `Impressoras de papel / toner — miolo (${countVis} disponível${countVis!==1?'s':''})`, bg: '#1E3A5F', color: '#60A5FA' },
+    m2:       { text: `Equipamentos UV / Eco-solvente (${countVis} disponível${countVis!==1?'s':''})`, bg: '#1E3A28', color: '#34D399' },
+    acrilico: { text: `Impressoras UV plano/chapa (${countVis} disponível${countVis!==1?'s':''})`, bg: '#2A1E3A', color: '#A78BFA' },
+  };
+  const cfg = labelMap[tipoCalc];
+  if (cfg) {
+    lbl.textContent = cfg.text;
+    lbl.style.background = cfg.bg;
+    lbl.style.color = cfg.color;
+    lbl.style.display = 'block';
+  } else {
+    lbl.style.display = 'none';
+  }
+}
+
+function atalhoFixo(papelId) {
+
+  // Marca botão ativo visualmente
+  document.querySelectorAll('.atalho-papel-btn').forEach(b => {
+    const ativo = parseInt(b.dataset.papelId) === papelId;
+    b.style.borderColor = ativo ? 'var(--primaria)' : 'var(--borda)';
+    b.style.background  = ativo ? 'rgba(233,69,96,.08)' : 'var(--card-bg)';
+    b.style.color       = ativo ? 'var(--primaria)' : 'var(--texto)';
+  });
+
+  // Pré-seleciona o papel no select do passo 2
+  const sel = document.getElementById('p2_papel_sel');
+  if (sel) {
+    sel.value = papelId;
+    selecionarPapel(); // preenche dimensões + configura st.papel
+  }
+
+  // Foca no campo quantidade para o usuário só digitar e avançar
+  const qtdInput = document.getElementById('p1_qtd');
+  if (qtdInput) qtdInput.focus();
+}
+
+function selecionarTipo(tipo, el) {
+  document.querySelectorAll('.tipo-card[onclick^="selecionarTipo"]').forEach(c => c.classList.remove('selecionado'));
+  el.classList.add('selecionado');
+  st.tipo = tipo;
+  document.getElementById('p1_m2_info').style.display = tipo === 'm2' ? 'block' : 'none';
+  // Painel correto no passo 2
+  const isPapelOuApostila = tipo === 'papel' || tipo === 'apostila';
+  document.getElementById('p2_papel').style.display   = isPapelOuApostila ? 'block' : 'none';
+  document.getElementById('p2_m2').style.display      = tipo === 'm2'       ? 'block' : 'none';
+  document.getElementById('p2_livro').style.display   = tipo === 'livro'    ? 'block' : 'none';
+  document.getElementById('p2_acrilico').style.display= tipo === 'acrilico' ? 'block' : 'none';
+  const subs = {
+    papel:    'Selecione o papel e o sistema calculará a imposição automática.',
+    m2:       'Selecione a máquina UV/Eco e o custo por m². Escolha a mídia em bobina se aplicável.',
+    livro:    'Configure o papel, formato e máquina de cada componente.',
+    acrilico: 'Selecione a chapa, informe os custos de impressão UV e corte.',
+    apostila: 'Selecione o papel do miolo. A capa será configurada no passo de acabamentos.',
+  };
+  document.getElementById('p2_sub').textContent = subs[tipo] || '';
+  // Limpar mídia ao trocar de tipo
+  const midSel = document.getElementById('p2_midia_sel');
+  if (midSel) { midSel.value = ''; st.midia = null; st.custoMidia = 0; }
+  const wireoSection = document.getElementById('p4_wireo');
+  if (wireoSection) wireoSection.style.display = tipo === 'livro' ? 'block' : 'none';
+  const capaSection = document.getElementById('p4_capa_apostila');
+  if (capaSection) capaSection.style.display = tipo === 'apostila' ? 'block' : 'none';
+  const espiralSection = document.getElementById('p4_espiral_apostila');
+  if (espiralSection) espiralSection.style.display = tipo === 'apostila' ? 'block' : 'none';
+  const pagRow = document.getElementById('p1_apostila_pag_row');
+  if (pagRow) pagRow.style.display = tipo === 'apostila' ? 'block' : 'none';
+  filtrarAcabamentosPorTipo(tipo);
+  const notaLam = document.getElementById('nota-laminacao-livro');
+  if (notaLam) notaLam.style.display = tipo === 'livro' ? 'block' : 'none';
+  if (tipo === 'livro') renderLivroComponentes();
+  filtrarMaquinas(tipo);
+  recalcular();
+}
+
+// ── Acrílico UV ───────────────────────────────────────────────────────────────
+function selecionarChapa() {
+  const sel = document.getElementById('p2_acril_sel');
+  const opt = sel ? sel.selectedOptions[0] : null;
+  const box = document.getElementById('p2_acril_imposicao');
+  const resumo = document.getElementById('p2_acril_resumo');
+  if (!opt || !opt.value) {
+    st.acrilico = null;
+    if (box) box.style.display = 'none';
+    if (resumo) resumo.style.display = 'none';
+    recalcular(); return;
+  }
+  st.acrilico = {
+    id: opt.value, nome: opt.dataset.nome,
+    largura_cm: parseFloat(opt.dataset.larg),
+    altura_cm: parseFloat(opt.dataset.alt),
+    espessura_mm: parseFloat(opt.dataset.esp),
+    cor: opt.dataset.cor,
+    custo: parseFloat(opt.dataset.custo),
+  };
+  recalcular();
+}
+
+function selecionarMaqCorte() {
+  const sel  = document.getElementById('p2_acril_maq_corte');
+  const val  = sel ? sel.value : '';
+  const divTempo = document.getElementById('p2_acril_corte_tempo');
+  const divFixo  = document.getElementById('p2_acril_corte_fixo');
+  if (val && val !== 'fixo') {
+    divTempo.style.display = 'block';
+    divFixo.style.display  = 'none';
+  } else if (val === 'fixo') {
+    divTempo.style.display = 'none';
+    divFixo.style.display  = 'block';
+  } else {
+    divTempo.style.display = 'none';
+    divFixo.style.display  = 'none';
+  }
+  recalcular();
+}
+
+function calcCortePorPeca() {
+  const sel = document.getElementById('p2_acril_maq_corte');
+  if (!sel) return 0;
+  const val = sel.value;
+  if (!val) return 0;
+  if (val === 'fixo') {
+    return parseFloat(document.getElementById('p2_acril_corte')?.value) || 0;
+  }
+  const opt = sel.selectedOptions[0];
+  const custoHora = parseFloat(opt?.dataset.hora) || 0;
+  const minutos   = parseFloat(document.getElementById('p2_acril_min_peca')?.value) || 0;
+  const custoPeca = (custoHora / 60) * minutos;
+  const el = document.getElementById('p2_acril_corte_calc');
+  if (el) el.textContent = 'R$ ' + custoPeca.toFixed(4);
+  return custoPeca;
+}
+
+function calcImposicaoAcrilico(cL, cA, pL, pA) {
+  // Acrílico: margem de 0.5cm por borda (chapa tem corte preciso)
+  const borda = 0.5;
+  const dL = cL - 2 * borda;
+  const dA = cA - 2 * borda;
+  if (dL <= 0 || dA <= 0 || pL <= 0 || pA <= 0) return { pecas: 1, orient: '' };
+  const v1 = Math.floor(dL / pL) * Math.floor(dA / pA);
+  const v2 = Math.floor(dL / pA) * Math.floor(dA / pL);
+  const best = Math.max(v1, v2, 1);
+  const isGirado = v2 > v1;
+  const cols = isGirado ? Math.floor(dL / pA) : Math.floor(dL / pL);
+  const rows = isGirado ? Math.floor(dA / pL) : Math.floor(dA / pA);
+  return { pecas: best, orient: `${cols}×${rows}${isGirado ? ' (girado)' : ''}` };
+}
+
+function calcAcrilico() {
+  st.acrilicoCustoChapa = 0;
+  st.acrilicoCustoUV = 0;
+  st.acrilicoCustoBranco = 0;
+  st.acrilicoCustoVerniz = 0;
+  st.acrilicoCustoCorte = 0;
+  st.acrilicoPecasPorChapa = 0;
+  st.acrilicoChapassNecessarias = 0;
+
+  if (!st.acrilico || !st.larg || !st.alt || !st.qtd) return;
+
+  const imp = calcImposicaoAcrilico(st.acrilico.largura_cm, st.acrilico.altura_cm, st.larg, st.alt);
+  st.acrilicoPecasPorChapa = imp.pecas;
+  const chapassNec = Math.ceil(st.qtd / imp.pecas);
+  st.acrilicoChapassNecessarias = chapassNec;
+  st.acrilicoCustoChapa = chapassNec * st.acrilico.custo;
+
+  const areaM2 = (st.larg / 100) * (st.alt / 100) * st.qtd;
+
+  if (st.maquina && st.maquina.tipo === 'm2') {
+    const cmykM2 = (st.maquina.custo_m2_cmyk || 0) + (st.maquina.custo_m2_dep || 0);
+    st.acrilicoCustoUV = areaM2 * cmykM2;
+
+    const brancoCk = document.getElementById('p3_acril_branco_ck');
+    if (brancoCk && brancoCk.checked) {
+      st.acrilicoCustoBranco = areaM2 * (st.maquina.custo_m2_branco || 0);
+    }
+    const vernizCk = document.getElementById('p3_acril_verniz_ck');
+    if (vernizCk && vernizCk.checked) {
+      st.acrilicoCustoVerniz = areaM2 * (st.maquina.custo_m2_verniz || 0);
+    }
+  }
+
+  const cortePeca = calcCortePorPeca();
+  st.acrilicoCustoCorte = cortePeca * st.qtd;
+
+  // Atualiza UI passo 2
+  const box = document.getElementById('p2_acril_imposicao');
+  if (box) box.style.display = 'block';
+  document.getElementById('p2_acril_pecas').textContent = imp.pecas;
+  document.getElementById('p2_acril_orient').textContent = imp.orient;
+  document.getElementById('p2_acril_chapas').textContent = chapassNec;
+  document.getElementById('p2_acril_custo_chapa').textContent = 'R$ ' + st.acrilicoCustoChapa.toFixed(2);
+
+  const resumo = document.getElementById('p2_acril_resumo');
+  if (resumo) resumo.style.display = 'block';
+  document.getElementById('p2_acril_r_chapa').textContent = 'R$ ' + st.acrilicoCustoChapa.toFixed(2);
+  document.getElementById('p2_acril_r_corte').textContent = 'R$ ' + st.acrilicoCustoCorte.toFixed(2);
+
+  st.custoPapel     = st.acrilicoCustoChapa;
+  st.custoImpressao = st.acrilicoCustoUV + st.acrilicoCustoBranco + st.acrilicoCustoVerniz + st.acrilicoCustoCorte;
+}
+
+// ── Mídia em Bobina ───────────────────────────────────────────────────────────
+function selecionarMidia() {
+  const sel = document.getElementById('p2_midia_sel');
+  if (!sel) return;
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) {
+    st.midia = null;
+    st.custoMidia = 0;
+    const prev = document.getElementById('p2_midia_preview');
+    if (prev) prev.style.display = 'none';
+    recalcular(); return;
+  }
+  st.midia = { id: opt.value, nome: opt.dataset.nome, custo_m2: parseFloat(opt.dataset.custo) };
+  recalcular();
+}
+
+// ── Papel ─────────────────────────────────────────────────────────────────────
+function selecionarPapel() {
+  const sel = document.getElementById('p2_papel_sel');
+  const opt = sel.selectedOptions[0];
+  const fixoNotice   = document.getElementById('p2_fixo_notice');
+  const formatoWrap  = document.getElementById('p2_formato_wrap');
+  const imposicaoBox = document.getElementById('p2_imposicao_box');
+
+  if (!opt || !opt.value) {
+    st.papel = null; st.formato = null;
+    formatoWrap.style.display = 'none';
+    fixoNotice.style.display  = 'none';
+    recalcular(); return;
+  }
+  st.papel = {
+    id: opt.value,
+    nome: opt.dataset.nome,
+    largura: parseFloat(opt.dataset.larg),
+    altura: parseFloat(opt.dataset.alt),
+    custo_resma: parseFloat(opt.dataset.resma),
+    folhas_resma: parseInt(opt.dataset.folhas),
+    fator_perda: parseFloat(opt.dataset.perda),
+    tamanho_fixo: parseInt(opt.dataset.fixo) === 1,
+  };
+
+  if (st.papel.tamanho_fixo) {
+    // Papel fixo: formato é o próprio papel, 1 folha = 1 peça
+    st.formato = { nome: st.papel.nome, larg: st.papel.largura, alt: st.papel.altura };
+    st.pecasPorFolha = 1;
+    // Auto-preenche e trava as dimensões da peça no passo 1
+    const p1l = document.getElementById('p1_larg');
+    const p1a = document.getElementById('p1_alt');
+    if (p1l) { p1l.value = st.papel.largura; p1l.readOnly = true; p1l.style.background = 'rgba(99,102,241,.07)'; p1l.style.color = '#818CF8'; st.larg = st.papel.largura; }
+    if (p1a) { p1a.value = st.papel.altura;  p1a.readOnly = true; p1a.style.background = 'rgba(99,102,241,.07)'; p1a.style.color = '#818CF8'; st.alt  = st.papel.altura;  }
+    const lb = document.getElementById('label-p1-larg');
+    const la = document.getElementById('label-p1-alt');
+    if (lb) lb.innerHTML = 'Largura (cm) <span style="font-size:.72rem;color:#818CF8;font-weight:700;">● fixo</span>';
+    if (la) la.innerHTML = 'Altura (cm) <span style="font-size:.72rem;color:#818CF8;font-weight:700;">● fixo</span>';
+    const banner = document.getElementById('p1_fixo_banner');
+    if (banner) banner.style.display = 'block';
+    // Mostra aviso, esconde seletor de formato
+    const custoFolha = st.papel.custo_resma / (st.papel.folhas_resma || 1);
+    document.getElementById('p2_fixo_formato').textContent = `${st.papel.largura} × ${st.papel.altura} cm`;
+    document.getElementById('p2_fixo_custo').textContent   = 'R$ ' + custoFolha.toFixed(4);
+    fixoNotice.style.display  = 'block';
+    formatoWrap.style.display = 'none';
+    imposicaoBox.style.display = 'none';
+  } else {
+    st.formato = null;
+    // Destrava os campos de dimensão no passo 1
+    const p1l = document.getElementById('p1_larg');
+    const p1a = document.getElementById('p1_alt');
+    if (p1l) { p1l.readOnly = false; p1l.style.background = ''; p1l.style.color = ''; }
+    if (p1a) { p1a.readOnly = false; p1a.style.background = ''; p1a.style.color = ''; }
+    const lb = document.getElementById('label-p1-larg');
+    const la = document.getElementById('label-p1-alt');
+    if (lb) lb.textContent = 'Largura final (cm)';
+    if (la) la.textContent = 'Altura final (cm)';
+    const banner = document.getElementById('p1_fixo_banner');
+    if (banner) banner.style.display = 'none';
+    fixoNotice.style.display  = 'none';
+    formatoWrap.style.display = 'block';
+    document.getElementById('p2_formato_preview').style.display = 'none';
+    imposicaoBox.style.display = 'none';
+    iniciarFormatoGrid();
+  }
+  recalcular();
+}
+
+// ── Formatos de impressão ─────────────────────────────────────────────────────
+const FORMATOS = [
+  { nome:'F4',       larg:33,   alt:48   },
+  { nome:'F8',       larg:24,   alt:33   },
+  { nome:'F9',       larg:22,   alt:32   },
+  { nome:'A4',       larg:21,   alt:29.7 },
+  { nome:'A3',       larg:29.7, alt:42   },
+  { nome:'Ofício',   larg:21,   alt:33   },
+  { nome:'F5',       larg:33,   alt:66   },
+  { nome:'Personalizado', larg:0, alt:0  },
+];
+
+function iniciarFormatoGrid() {
+  const grid = document.getElementById('formato-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  FORMATOS.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'formato-card';
+    card.id = 'fc-' + f.nome;
+    card.innerHTML = `<div class="fn">${f.nome}</div><div class="fd">${f.nome === 'Personalizado' ? 'outro' : f.larg+'×'+f.alt}</div>`;
+    card.onclick = () => selecionarFormato(f);
+    grid.appendChild(card);
+  });
+}
+
+function selecionarFormato(f) {
+  document.querySelectorAll('.formato-card').forEach(c => c.classList.remove('selecionado'));
+  const card = document.getElementById('fc-' + f.nome);
+  if (card) card.classList.add('selecionado');
+  const customWrap = document.getElementById('p2_formato_custom');
+  customWrap.style.display = f.nome === 'Personalizado' ? 'block' : 'none';
+  if (f.nome !== 'Personalizado') {
+    st.formato = { nome: f.nome, larg: f.larg, alt: f.alt };
+    atualizarFormatoPreview();
+    recalcular();
+  } else {
+    st.formato = null;
+  }
+}
+
+function selecionarFormatoCustom() {
+  const larg = parseFloat(document.getElementById('p2_formato_larg').value) || 0;
+  const alt  = parseFloat(document.getElementById('p2_formato_alt').value)  || 0;
+  if (!larg || !alt) return;
+  st.formato = { nome: 'Personalizado', larg, alt };
+  atualizarFormatoPreview();
+  recalcular();
+}
+
+function calcFormatosPorResma(reL, reA, fL, fA) {
+  if (!fL || !fA || !reL || !reA) return 1;
+  const v1 = Math.floor(reL / fL) * Math.floor(reA / fA);
+  const v2 = Math.floor(reL / fA) * Math.floor(reA / fL);
+  return Math.max(v1, v2, 1);
+}
+
+function atualizarFormatoPreview() {
+  if (!st.papel || !st.formato || !st.formato.larg || !st.formato.alt) return;
+  const n = calcFormatosPorResma(st.papel.largura, st.papel.altura, st.formato.larg, st.formato.alt);
+  const custoFolhaResma = st.papel.custo_resma / st.papel.folhas_resma;
+  const custo = custoFolhaResma / n;
+  document.getElementById('p2_formatos_por_resma').textContent = n;
+  document.getElementById('p2_formato_nome_label').textContent = st.formato.nome;
+  document.getElementById('p2_custo_folha_formato').textContent = 'R$ ' + custo.toFixed(4);
+  document.getElementById('p2_formato_preview').style.display = 'block';
+}
+
+// ── Máquina ───────────────────────────────────────────────────────────────────
+function selecionarMaquina() {
+  const sel = document.getElementById('p3_maq_sel');
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) { st.maquina = null; recalcular(); return; }
+  const clickPb  = parseFloat(opt.dataset.clickpb)  || 0;
+  const clickCor = parseFloat(opt.dataset.clickcor) || 0;
+  const m2Branco = parseFloat(opt.dataset.branco) || 0;
+  const m2Verniz = parseFloat(opt.dataset.verniz) || 0;
+  st.maquina = {
+    id: opt.value,
+    nome: opt.dataset.nome,
+    tipo: opt.dataset.tipo,
+    boca_cm: parseFloat(opt.dataset.boca),
+    custo_click: parseFloat(opt.dataset.toner) + parseFloat(opt.dataset.manut) + parseFloat(opt.dataset.deprec),
+    custo_click_pb:  clickPb,
+    custo_click_cor: clickCor,
+    custo_m2_cmyk: parseFloat(opt.dataset.imp) || 0,
+    custo_m2_dep:  parseFloat(opt.dataset.dep2) || 0,
+    custo_m2:      parseFloat(opt.dataset.mat) + parseFloat(opt.dataset.imp) + parseFloat(opt.dataset.dep2),
+    custo_m2_branco: m2Branco,
+    custo_m2_verniz: m2Verniz,
+  };
+  const clickOpts  = document.getElementById('p3_click_opts');
+  const m2Prev     = document.getElementById('p3_m2_preview');
+  const corWrap    = document.getElementById('p3_cor_wrap');
+  const acrilOpts  = document.getElementById('p3_acril_uv_opts');
+  if (st.maquina.tipo === 'click') {
+    clickOpts.style.display = 'block';
+    m2Prev.style.display    = 'none';
+    acrilOpts.style.display = 'none';
+    corWrap.style.display   = (clickPb > 0 || clickCor > 0) ? 'block' : 'none';
+  } else if (st.tipo === 'acrilico') {
+    clickOpts.style.display = 'none';
+    m2Prev.style.display    = 'none';
+    corWrap.style.display   = 'none';
+    acrilOpts.style.display = 'block';
+    const brRate = document.getElementById('p3_acril_branco_rate');
+    const vrRate = document.getElementById('p3_acril_verniz_rate');
+    if (brRate) brRate.textContent = m2Branco > 0 ? `R$ ${m2Branco.toFixed(2)}/m²` : '(não configurado)';
+    if (vrRate) vrRate.textContent = m2Verniz > 0 ? `R$ ${m2Verniz.toFixed(2)}/m²` : '(não configurado)';
+  } else {
+    clickOpts.style.display = 'none';
+    m2Prev.style.display    = 'none';
+    acrilOpts.style.display = 'none';
+    corWrap.style.display   = 'none';
+  }
+  recalcular();
+}
+
+function selecionarTipoCor(tipo, el) {
+  ['btn-cor-pb','btn-cor-cor','btn-cor-mista'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.classList.remove('selecionado');
+  });
+  el.classList.add('selecionado');
+  const pctWrap = document.getElementById('p3_pct_cor_wrap');
+  if (tipo === 'pb')    { st.pctCor = 0;   pctWrap.style.display = 'none'; }
+  if (tipo === 'cor')   { st.pctCor = 100; pctWrap.style.display = 'none'; }
+  if (tipo === 'mista') {
+    st.pctCor = parseInt(document.getElementById('p3_pct_cor_range').value) || 50;
+    pctWrap.style.display = 'block';
+  }
+  recalcular();
+}
+
+function selecionarLados(n, el) {
+  document.querySelectorAll('#p3_click_opts .tipo-card').forEach(c => c.classList.remove('selecionado'));
+  el.classList.add('selecionado');
+  st.lados = n;
+  recalcular();
+}
+
+// ── Acabamentos ───────────────────────────────────────────────────────────────
+function toggleAcabamento(cb) {
+  const wrap = document.getElementById('acab-wrap-' + cb.dataset.id);
+  const params = document.getElementById('acab-params-' + cb.dataset.id);
+  if (cb.checked) {
+    wrap.classList.add('ativo');
+    params.classList.add('visivel');
+    st.acabSel[cb.dataset.id] = {
+      id: cb.dataset.id,
+      nome: cb.dataset.nome,
+      tipo: cb.dataset.tipo,
+      custo_base: parseFloat(cb.dataset.custo) || 0,
+      markup: parseFloat(cb.dataset.markup) || 1.0,
+      bob_larg: parseFloat(cb.dataset.bobLarg) || 32,
+      bob_comp: parseFloat(cb.dataset.bobComp) || 0,
+      bob_custo: parseFloat(cb.dataset.bobCusto) || 0,
+      unidade: cb.dataset.unidade,
+    };
+  } else {
+    wrap.classList.remove('ativo');
+    params.classList.remove('visivel');
+    delete st.acabSel[cb.dataset.id];
+    delete st.custoAcab[cb.dataset.id];
+  }
+  recalcular();
+}
+
+// ── Cálculo central ───────────────────────────────────────────────────────────
+// Calcula metros de bobina consumidos por folha, escolhendo a orientação mais econômica
+function calcMetrosPorFolha(bobinaLarg, sheetL, sheetA) {
+  let melhor = Infinity;
+  // Orientação 1: lado A da folha cruza a largura da bobina, lado L entra no sentido do avanço
+  if (sheetA <= bobinaLarg) {
+    const porPasse = Math.floor(bobinaLarg / sheetA);
+    melhor = Math.min(melhor, (sheetL / 100) / porPasse);
+  }
+  // Orientação 2: lado L da folha cruza a largura da bobina, lado A entra no sentido do avanço
+  if (sheetL <= bobinaLarg) {
+    const porPasse = Math.floor(bobinaLarg / sheetL);
+    melhor = Math.min(melhor, (sheetA / 100) / porPasse);
+  }
+  return melhor === Infinity ? sheetA / 100 : melhor;
+}
+
+function getCustoClickEfetivo() {
+  if (!st.maquina) return 0;
+  const pb  = st.maquina.custo_click_pb  || 0;
+  const cor = st.maquina.custo_click_cor || 0;
+  if (!pb && !cor) return st.maquina.custo_click;
+  const pctCor = ((st.pctCor !== undefined ? st.pctCor : 100)) / 100;
+  return pb * (1 - pctCor) + cor * pctCor;
+}
+
+
+function calcImposicao(fL, fA, pL, pA) {
+  const sangria = 0.4; // 0.2cm por lado = 0.4cm total por dimensão
+  const borda = 1.0;   // 1cm por borda = 2cm total por dimensão
+  const dL = fL - 2 * borda;
+  const dA = fA - 2 * borda;
+  if (dL <= 0 || dA <= 0) return { pecas: 1, orient: '1×1' };
+  const pl = pL + sangria, pa = pA + sangria;
+  const v1 = Math.floor(dL / pl) * Math.floor(dA / pa);
+  const v2 = Math.floor(dL / pa) * Math.floor(dA / pl);
+  if (v1 >= v2) return { pecas: Math.max(v1, 1), orient: `${Math.floor(dL/pl)}×${Math.floor(dA/pa)} (normal)` };
+  return { pecas: Math.max(v2, 1), orient: `${Math.floor(dL/pa)}×${Math.floor(dA/pl)} (girado)` };
+}
+
+function recalcular() {
+  st.larg  = parseFloat(document.getElementById('p1_larg').value) || 0;
+  st.alt   = parseFloat(document.getElementById('p1_alt').value)  || 0;
+  st.qtd   = parseInt(document.getElementById('p1_qtd').value)    || 0;
+  st.nome  = document.getElementById('p1_nome').value;
+  if (st.tipo === 'apostila') {
+    const pagEl = document.getElementById('p1_apostila_pag');
+    st.apostilaPaginas = parseInt(pagEl?.value) || 0;
+  }
+  st.setup = parseFloat(document.getElementById('p5_setup')?.value) || 0;
+  st.moMin = parseFloat(document.getElementById('p5_mo_min')?.value) || 20;
+  st.perda = parseFloat(document.getElementById('p2_perda')?.value) || 0;
+
+  st.custoPapel = 0;
+  st.custoImpressao = 0;
+  st.custoAcab = {};
+
+  if (st.tipo === 'papel') {
+    calcPapelImpresso();
+  } else if (st.tipo === 'm2' || st.tipo === 'bobina_eco') {
+    calcM2();
+  } else if (st.tipo === 'livro') {
+    calcLivro();
+    updateLivroResumos();
+  } else if (st.tipo === 'acrilico') {
+    calcAcrilico();
+  } else if (st.tipo === 'apostila') {
+    const apostilaInfoEl = document.getElementById('p1_apostila_info');
+    if (apostilaInfoEl) {
+      if (st.apostilaPaginas >= 1) {
+        const fpEx = Math.ceil(st.apostilaPaginas / 2);
+        apostilaInfoEl.style.display = 'block';
+        apostilaInfoEl.textContent = `${st.apostilaPaginas} páginas → ${fpEx} folha${fpEx !== 1 ? 's' : ''} por exemplar (duplex)`;
+      } else {
+        apostilaInfoEl.style.display = 'none';
+      }
+    }
+    calcPapelImpresso();
+    calcApostilaCapa();
+  }
+
+  calcAcabamentos();
+
+  const totalAcab = Object.values(st.custoAcab).reduce((s, v) => s + (isNaN(v) ? 0 : v), 0);
+  const custoMO = st.moMin * MO_TAXA;
+  const custoExtras = st.tipo === 'livro' ? ((st.custoLaminacao||0) + (st.custoCapaDura||0)) : 0;
+  const custoCapaApostila = st.tipo === 'apostila' ? (st.apostilaCapa.custoTotal || 0) : 0;
+  const custoBase = st.custoPapel + st.custoImpressao + totalAcab + st.setup + custoMO + (st.custoWireo || 0) + custoExtras + custoCapaApostila;
+  const custoOverhead = custoBase * (OVERHEAD_PCT / 100);
+  st.custoTotal = custoBase + custoOverhead;
+  const precoBase = st.custoTotal * st.markup;
+  const investVenda = precoBase * (INVEST_VENDA_PCT / 100);
+  st.precoVenda = precoBase + investVenda;
+  const precoUnit = st.qtd > 0 ? st.precoVenda / st.qtd : 0;
+  const margem = st.precoVenda > 0 ? ((st.precoVenda - st.custoTotal) / st.precoVenda * 100) : 0;
+  const lucro = st.precoVenda - st.custoTotal;
+
+  // Atualiza breakdown sidebar
+  const fmt = v => v > 0 ? 'R$ ' + v.toFixed(2) : '—';
+  document.getElementById('bd_papel').textContent = fmt(st.custoPapel);
+  document.getElementById('bd_impressao').textContent = fmt(st.custoImpressao);
+  document.getElementById('bd_setup').textContent = fmt(st.setup);
+  document.getElementById('bd_mo').textContent = fmt(custoMO);
+  document.getElementById('bd_total').textContent = 'R$ ' + custoBase.toFixed(2);
+  const bdOverRow = document.getElementById('bd_overhead_row');
+  const bdCustoFinalRow = document.getElementById('bd_custo_final_row');
+  if (OVERHEAD_PCT > 0) {
+    document.getElementById('bd_overhead_pct').textContent = OVERHEAD_PCT;
+    document.getElementById('bd_overhead').textContent = 'R$ ' + custoOverhead.toFixed(2);
+    document.getElementById('bd_custo_final').textContent = 'R$ ' + st.custoTotal.toFixed(2);
+    bdOverRow.style.display = 'flex';
+    bdCustoFinalRow.style.display = 'flex';
+  } else {
+    bdOverRow.style.display = 'none';
+    bdCustoFinalRow.style.display = 'none';
+  }
+  document.getElementById('bd_markup').textContent = '× ' + st.markup.toFixed(1);
+  const bdInvVendaRow = document.getElementById('bd_invest_venda_row');
+  if (INVEST_VENDA_PCT > 0) {
+    document.getElementById('bd_invest_venda_pct').textContent = INVEST_VENDA_PCT;
+    document.getElementById('bd_invest_venda').textContent = 'R$ ' + investVenda.toFixed(2);
+    bdInvVendaRow.style.display = 'flex';
+  } else {
+    bdInvVendaRow.style.display = 'none';
+  }
+  document.getElementById('bd_venda').textContent = 'R$ ' + st.precoVenda.toFixed(2);
+  document.getElementById('bd_unit').textContent = 'R$ ' + precoUnit.toFixed(2);
+  document.getElementById('bd_margem').textContent = margem.toFixed(1) + '%';
+  // Custo por página — apenas para apostila
+  const bdPorPaginaRow = document.getElementById('bd_por_pagina_row');
+  const bdPorPagina = document.getElementById('bd_por_pagina');
+  if (st.tipo === 'apostila' && bdPorPaginaRow && bdPorPagina) {
+    const totalPaginas = st.componentes
+      .filter(c => c.tipo === 'miolo')
+      .reduce((acc, c) => acc + (c.paginas || 0), 0);
+    if (totalPaginas > 0 && precoUnit > 0) {
+      const centavosPorPagina = (precoUnit / totalPaginas) * 100;
+      bdPorPagina.textContent = centavosPorPagina.toFixed(2).replace('.', ',') + ' ¢';
+      bdPorPaginaRow.style.display = 'flex';
+    } else {
+      bdPorPaginaRow.style.display = 'none';
+    }
+  } else if (bdPorPaginaRow) {
+    bdPorPaginaRow.style.display = 'none';
+  }
+
+  // Acabamentos no breakdown
+  const abl = document.getElementById('bd_acabamentos_lista');
+  abl.innerHTML = '';
+  Object.entries(st.custoAcab).forEach(([id, custo]) => {
+    const a = st.acabSel[id];
+    if (!a) return;
+    abl.innerHTML += `<div class="breakdown-linha"><span class="text-muted" style="font-size:.8rem;">✂️ ${a.nome}</span><span class="breakdown-val" style="font-size:.85rem;">R$ ${(custo||0).toFixed(2)}</span></div>`;
+  });
+  // Laminação e Capa Dura no breakdown (livro)
+  const bdLamRow = document.getElementById('bd_laminacao_row');
+  const bdLam    = document.getElementById('bd_laminacao');
+  if (bdLamRow && bdLam) {
+    if (st.tipo === 'livro' && (st.custoLaminacao||0) > 0) {
+      bdLamRow.style.display = 'flex';
+      bdLam.textContent = 'R$ ' + st.custoLaminacao.toFixed(2);
+    } else { bdLamRow.style.display = 'none'; }
+  }
+  const bdCapRow = document.getElementById('bd_capadura_row');
+  const bdCap    = document.getElementById('bd_capadura');
+  if (bdCapRow && bdCap) {
+    if (st.tipo === 'livro' && (st.custoCapaDura||0) > 0) {
+      bdCapRow.style.display = 'flex';
+      bdCap.textContent = 'R$ ' + st.custoCapaDura.toFixed(2);
+    } else { bdCapRow.style.display = 'none'; }
+  }
+  // Wire-O no breakdown
+  const bdWireoRow = document.getElementById('bd_wireo_row');
+  const bdWireo = document.getElementById('bd_wireo');
+  if (bdWireoRow && bdWireo) {
+    if (st.tipo === 'livro' && st.custoWireo > 0) {
+      bdWireoRow.style.display = 'flex';
+      bdWireo.textContent = 'R$ ' + st.custoWireo.toFixed(2);
+    } else {
+      bdWireoRow.style.display = 'none';
+    }
+  }
+  // Capa Apostila no breakdown
+  const bdCapaApostilaRow = document.getElementById('bd_capa_apostila_row');
+  const bdCapaApostila = document.getElementById('bd_capa_apostila');
+  if (bdCapaApostilaRow && bdCapaApostila) {
+    if (st.tipo === 'apostila' && (st.apostilaCapa.custoTotal || 0) > 0) {
+      bdCapaApostilaRow.style.display = 'flex';
+      bdCapaApostila.textContent = 'R$ ' + st.apostilaCapa.custoTotal.toFixed(2);
+    } else {
+      bdCapaApostilaRow.style.display = 'none';
+    }
+  }
+  const bdEspiralRow = document.getElementById('bd_espiral_apostila_row');
+  const bdEspiral = document.getElementById('bd_espiral_apostila');
+  if (bdEspiralRow && bdEspiral) {
+    const _paginasEspiral = st.componentes.filter(c => c.tipo === 'miolo').reduce((a, c) => a + (c.paginas || 0), 0);
+    const _custoEspUnit = getCustoEspiral(_paginasEspiral);
+    if (st.tipo === 'apostila' && st.espiralAtivo && _custoEspUnit > 0) {
+      bdEspiralRow.style.display = 'flex';
+      bdEspiral.textContent = 'R$ ' + (_custoEspUnit * st.qtd).toFixed(2);
+      if (document.getElementById('espiral_total_display'))
+        document.getElementById('espiral_total_display').textContent = 'R$ ' + (_custoEspUnit * st.qtd).toFixed(2).replace('.', ',');
+    } else {
+      bdEspiralRow.style.display = 'none';
+    }
+  }
+
+  // Passo 5 preview
+  const pv = document.getElementById('p5_preview_setup');
+  if (pv) { pv.textContent = 'R$ ' + st.setup.toFixed(2); }
+  const pm = document.getElementById('p5_preview_mo');
+  if (pm) { pm.textContent = 'R$ ' + custoMO.toFixed(2); }
+  const ps = document.getElementById('p5_preview_sub');
+  if (ps) { ps.textContent = 'R$ ' + (st.setup + custoMO).toFixed(2); }
+
+  // Passo 6 resultado
+  document.getElementById('r_custo_total').textContent = 'R$ ' + st.custoTotal.toFixed(2);
+  document.getElementById('r_preco_venda').textContent = 'R$ ' + st.precoVenda.toFixed(2);
+  document.getElementById('r_preco_unit').textContent = 'R$ ' + precoUnit.toFixed(2);
+  const custoUnit = st.qtd > 0 ? st.custoTotal / st.qtd : 0;
+  document.getElementById('r_custo_unit').textContent = 'R$ ' + custoUnit.toFixed(4);
+  document.getElementById('r_margem').textContent = margem.toFixed(1) + '%';
+  document.getElementById('r_lucro').textContent = 'R$ ' + lucro.toFixed(2);
+
+  // Investimento Contínuo no resultado
+  const investRow = document.getElementById('r_invest_row');
+  if (investRow) {
+    const temOverhead = OVERHEAD_PCT > 0 && st.precoVenda > 0;
+    const temInvestVenda = INVEST_VENDA_PCT > 0;
+    if (temOverhead || temInvestVenda) {
+      if (temOverhead) {
+        const investPctSobreVenda = (custoOverhead / st.precoVenda) * 100;
+        document.getElementById('r_invest_valor').textContent = 'R$ ' + custoOverhead.toFixed(2);
+        document.getElementById('r_invest_pct').textContent = investPctSobreVenda.toFixed(1) + '%';
+        document.getElementById('r_invest_pct_cfg').textContent = OVERHEAD_PCT;
+        document.getElementById('r_invest_custo_bloco').style.display = '';
+      } else {
+        document.getElementById('r_invest_custo_bloco').style.display = 'none';
+      }
+      const blocoVenda = document.getElementById('r_invest_venda_bloco');
+      if (temInvestVenda) {
+        const investVendaPctSobreVenda = st.precoVenda > 0 ? (investVenda / st.precoVenda) * 100 : 0;
+        document.getElementById('r_invest_venda_pct_cfg').textContent = INVEST_VENDA_PCT;
+        document.getElementById('r_invest_venda_valor').textContent = 'R$ ' + investVenda.toFixed(2);
+        document.getElementById('r_invest_venda_pct_venda').textContent = investVendaPctSobreVenda.toFixed(1) + '%';
+        blocoVenda.style.display = '';
+      } else {
+        blocoVenda.style.display = 'none';
+      }
+      const blocoTotal = document.getElementById('r_invest_total_bloco');
+      if (temOverhead && temInvestVenda) {
+        const totalInvest = custoOverhead + investVenda;
+        const totalInvestPct = st.precoVenda > 0 ? (totalInvest / st.precoVenda) * 100 : 0;
+        document.getElementById('r_invest_total_valor').textContent = 'R$ ' + totalInvest.toFixed(2);
+        document.getElementById('r_invest_total_pct').textContent = totalInvestPct.toFixed(1) + '%';
+        blocoTotal.style.display = '';
+      } else {
+        blocoTotal.style.display = 'none';
+      }
+      investRow.style.display = 'block';
+    } else {
+      investRow.style.display = 'none';
+    }
+  }
+
+  if (st.passo === 6) gerarTabelaQuantidades();
+}
+
+function calcPapelImpresso() {
+  if (!st.papel || !st.formato || !st.formato.larg || !st.formato.alt || !st.qtd) return;
+  if (st.tipo === 'apostila' && !(st.apostilaPaginas >= 1)) return;
+
+  let custoFolha, formatosPorResma, imp;
+  // Para apostila: cada exemplar precisa de ceil(paginas/2) folhas (duplex)
+  const folhasPorEx = st.tipo === 'apostila' ? Math.ceil(st.apostilaPaginas / 2) : 1;
+
+  if (st.papel.tamanho_fixo) {
+    // 1 folha = 1 peça, sem imposição
+    custoFolha = st.papel.custo_resma / (st.papel.folhas_resma || 1);
+    formatosPorResma = 1;
+    st.pecasPorFolha = 1;
+    st.larg = st.papel.largura;
+    st.alt  = st.papel.altura;
+    st.folhasLiq   = st.qtd * folhasPorEx;
+    st.folhasTotal = Math.ceil(st.folhasLiq * (1 + st.perda / 100));
+    st.custoPapel  = st.folhasTotal * custoFolha;
+    imp = { pecas: 1, orient: 'fixo' };
+  } else {
+    if (!st.larg || !st.alt) return;
+    formatosPorResma = calcFormatosPorResma(st.papel.largura, st.papel.altura, st.formato.larg, st.formato.alt);
+    custoFolha = (st.papel.custo_resma / st.papel.folhas_resma) / formatosPorResma;
+    imp = calcImposicao(st.formato.larg, st.formato.alt, st.larg, st.alt);
+    st.pecasPorFolha = imp.pecas;
+    st.folhasLiq   = Math.ceil(st.qtd * folhasPorEx / st.pecasPorFolha);
+    st.folhasTotal = Math.ceil(st.folhasLiq * (1 + st.perda / 100));
+    st.custoPapel  = st.folhasTotal * custoFolha;
+  }
+
+  st._det = {
+    maquina_tipo: st.maquina?.tipo,
+    fpr: formatosPorResma, custo_folha: custoFolha,
+    pecas_por_folha: st.pecasPorFolha,
+    folhas_liq: st.folhasLiq, folhas_total: st.folhasTotal, perda_pct: st.perda,
+    papel_larg: st.papel.largura, papel_alt: st.papel.altura,
+    formato_larg: st.formato.larg, formato_alt: st.formato.alt,
+    lados: st.lados, boca_cm: st.maquina?.boca_cm || 0,
+  };
+
+  // UI passo 2
+  const box = document.getElementById('p2_imposicao_box');
+  if (box) {
+    box.style.display = 'block';
+    document.getElementById('p2_pecas_num').textContent = st.pecasPorFolha;
+    document.getElementById('p2_orient_txt').textContent = imp.orient;
+    document.getElementById('p2_folhas_num').textContent = st.folhasLiq;
+    document.getElementById('p2_folhas_perda_num').textContent = st.folhasTotal;
+    document.getElementById('p2_custo_papel').textContent = 'R$ ' + st.custoPapel.toFixed(2);
+    document.getElementById('p2_custo_folha').textContent = custoFolha.toFixed(4);
+  }
+
+  // Impressão click — 1 click a cada [boca_cm] de percurso do tambor × lados
+  // Se o formato cabe deitado (alt ≤ boca), roda pela borda longa: percurso = larg (lado curto)
+  // Se não cabe deitado (alt > boca), roda em pé: percurso = alt
+  if (st.maquina && st.maquina.tipo === 'click') {
+    const boca = st.maquina.boca_cm || 33;
+    const percurso = st.formato.alt <= boca ? st.formato.larg : st.formato.alt;
+    const passesPorLado = Math.ceil(percurso / boca);
+    st.clicksFolha = passesPorLado * st.lados;
+    st.clicksTotal = st.folhasTotal * st.clicksFolha;
+    const custoClickEf = getCustoClickEfetivo();
+    st.custoImpressao = st.clicksTotal * custoClickEf;
+    st._det.clicks_por_folha = st.clicksFolha;
+    st._det.clicks_total = st.clicksTotal;
+    st._det.custo_click = custoClickEf;
+
+    const prev = document.getElementById('p3_click_preview');
+    if (prev) {
+      prev.style.display = 'block';
+      document.getElementById('p3_clicks_folha').textContent = st.clicksFolha;
+      document.getElementById('p3_clicks_total').textContent = st.clicksTotal;
+      document.getElementById('p3_custo_imp').textContent = 'R$ ' + st.custoImpressao.toFixed(2);
+    }
+  }
+}
+
+function calcM2() {
+  const perda = parseFloat(document.getElementById('p2_perda_m2')?.value) || 5;
+  const areaLiq = (st.larg / 100) * (st.alt / 100) * st.qtd;
+  st.areaBruta = areaLiq * (1 + perda / 100);
+  st._det = {
+    maquina_tipo: st.tipo, larg: st.larg, alt: st.alt, qtd: st.qtd,
+    area_liq: areaLiq, area_bruta: st.areaBruta, perda_pct: perda,
+  };
+
+  const el1 = document.getElementById('p1_area_calc');
+  if (el1) el1.textContent = st.areaBruta.toFixed(2);
+  const el2 = document.getElementById('p2_m2_area');
+  if (el2) el2.textContent = st.areaBruta.toFixed(2) + ' m²';
+  const el3 = document.getElementById('p3_area_total');
+  if (el3) el3.textContent = st.areaBruta.toFixed(2) + ' m²';
+
+  // Custo da mídia em bobina (material separado)
+  if (st.midia) {
+    st.custoMidia = st.areaBruta * st.midia.custo_m2;
+    const prev = document.getElementById('p2_midia_preview');
+    const ct   = document.getElementById('p2_midia_custo_total');
+    const cm2  = document.getElementById('p2_midia_custo_m2');
+    if (prev) prev.style.display = 'block';
+    if (ct)   ct.textContent = 'R$ ' + st.custoMidia.toFixed(2);
+    if (cm2)  cm2.textContent = 'R$ ' + st.midia.custo_m2.toFixed(2) + '/m²';
+  } else {
+    st.custoMidia = 0;
+    const prev = document.getElementById('p2_midia_preview');
+    if (prev) prev.style.display = 'none';
+  }
+
+  if (st.maquina && (st.maquina.tipo === 'm2' || st.maquina.tipo === 'bobina')) {
+    st.custoImpressao = st.areaBruta * st.maquina.custo_m2;
+    st.custoPapel = st.custoMidia;
+    st._det.custo_m2_maq = st.maquina.custo_m2;
+    st._det.custo_midia_m2 = st.midia?.custo_m2 || 0;
+    const el4 = document.getElementById('p3_custo_m2');
+    if (el4) { el4.textContent = 'R$ ' + st.custoImpressao.toFixed(2); }
+    const el5 = document.getElementById('p3_m2_preview');
+    if (el5) el5.style.display = 'block';
+  }
+}
+
+function calcAcabamentos() {
+  Object.entries(st.acabSel).forEach(([id, a]) => {
+    let custo = 0;
+    if (a.tipo === 'bobina') {
+      if (st.tipo === 'livro') {
+        custo = 0; // Laminação em Encadernados é configurada por componente no passo 2
+      } else if (a.bob_comp > 0 && st.folhasTotal > 0 && st.papel && st.formato) {
+        const custoPorMetro = a.bob_custo / a.bob_comp;
+        const mPorFolha = calcMetrosPorFolha(a.bob_larg || 32, st.formato.larg, st.formato.alt);
+        const ladosSel = document.querySelector(`input[name="acab-lados-${id}"]:checked`);
+        const lados = ladosSel ? parseInt(ladosSel.value) : 1;
+        custo = st.folhasTotal * mPorFolha * custoPorMetro * a.markup * lados;
+      }
+    } else if (a.tipo === 'hora') {
+      const min = parseFloat(document.getElementById('acab-min-' + id)?.value) || 0;
+      custo = (min / 60) * a.custo_base * a.markup;
+    } else if (a.tipo === 'unidade') {
+      const qtdU = parseFloat(document.getElementById('acab-qtd-' + id)?.value) || 1;
+      const precoInput = parseFloat(document.getElementById('acab-preco-' + id)?.value);
+      const preco = isNaN(precoInput) ? a.custo_base : precoInput;
+      custo = st.qtd * qtdU * preco * a.markup;
+    } else if (a.tipo === 'job') {
+      custo = a.custo_base * a.markup;
+    }
+    st.custoAcab[id] = isNaN(custo) ? 0 : Math.max(0, custo);
+  });
+}
+
+// ── Markup ────────────────────────────────────────────────────────────────────
+function _sincMetaMargem(markup) {
+  const el = document.getElementById('r_meta_margem');
+  const hint = document.getElementById('r_meta_margem_hint');
+  if (!el) return;
+  const fator = 1 + INVEST_VENDA_PCT / 100;
+  const m = (1 - 1 / (markup * fator)) * 100;
+  el.value = m > 0 ? m.toFixed(1) : '';
+  if (hint) hint.textContent = m > 0 ? `→ markup ×${markup.toFixed(2)}` : '';
+}
+
+function atualizarMarkup(v) {
+  st.markup = parseFloat(v);
+  document.getElementById('r_markup_range').value = v;
+  document.getElementById('r_markup_input').value = parseFloat(v).toFixed(1);
+  document.getElementById('r_markup_display').textContent = '× ' + parseFloat(v).toFixed(1);
+  _sincMetaMargem(st.markup);
+  recalcular();
+}
+function atualizarMarkupInput(v) {
+  const n = Math.max(1.0, parseFloat(v) || 1.0);
+  document.getElementById('r_markup_range').value = Math.min(n, 10);
+  document.getElementById('r_markup_display').textContent = '× ' + n.toFixed(1);
+  st.markup = n;
+  _sincMetaMargem(n);
+  recalcular();
+}
+
+function atualizarMetaMargem(v) {
+  const m = parseFloat(v);
+  if (isNaN(m) || m <= 0 || m >= 100) return;
+  const fator = 1 + INVEST_VENDA_PCT / 100;
+  const markup = 1 / (fator * (1 - m / 100));
+  atualizarMarkup(markup.toFixed(2));
+}
+
+// ── Tabela de quantidades ─────────────────────────────────────────────────────
+function gerarTabelaQuantidades() {
+  if (!st.papel && (st.tipo === 'papel' || st.tipo === 'apostila')) return;
+  const base = st.qtd || 100;
+  const faixas = [
+    Math.round(base * 0.5),
+    base,
+    Math.round(base * 2),
+    Math.round(base * 5),
+    Math.round(base * 10),
+  ].filter((v, i, a) => v > 0 && a.indexOf(v) === i).sort((a, b) => a - b);
+
+  let html = '<thead><tr><th>Qtd</th><th style="text-align:right">Custo</th><th style="text-align:right">Venda</th><th style="text-align:right">Unit.</th><th style="text-align:right">Margem</th></tr></thead><tbody>';
+
+  faixas.forEach((q, i) => {
+    const r = simularCalculo(q);
+    const cls = q === base ? 'class="atual"' : '';
+    html += `<tr ${cls} data-row="${i}">
+      <td><input type="number" class="qtd-edit-input" value="${q}" min="1" step="1"
+           style="width:70px;border:1px solid var(--borda);border-radius:5px;padding:3px 6px;background:var(--card-bg);color:var(--texto);font-size:.9rem;text-align:center;"
+           onchange="atualizarLinhaTabela(this, ${i})"></td>
+      <td class="td-custo" style="text-align:right">R$ ${r.custo.toFixed(2)}</td>
+      <td class="td-venda" style="text-align:right">R$ ${r.venda.toFixed(2)}</td>
+      <td class="td-unit" style="text-align:right">R$ ${(r.venda/q).toFixed(2)}</td>
+      <td class="td-margem" style="text-align:right">${r.margem.toFixed(1)}%</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('r_tabela_qtd').innerHTML = html;
+}
+
+function atualizarLinhaTabela(input, rowIdx) {
+  const q = parseInt(input.value);
+  if (!q || q < 1) return;
+  const tr = input.closest('tr');
+  const r = simularCalculo(q);
+  tr.querySelector('.td-custo').textContent  = 'R$ ' + r.custo.toFixed(2);
+  tr.querySelector('.td-venda').textContent  = 'R$ ' + r.venda.toFixed(2);
+  tr.querySelector('.td-unit').textContent   = 'R$ ' + (r.venda / q).toFixed(2);
+  tr.querySelector('.td-margem').textContent = r.margem.toFixed(1) + '%';
+}
+
+function simularCalculo(qtd) {
+  const perdaSim = st.perda;
+  let custoPapel = 0, custoImp = 0;
+  if ((st.tipo === 'papel' || st.tipo === 'apostila') && st.papel && st.formato && st.pecasPorFolha > 0) {
+    const folhasPorExSim = st.tipo === 'apostila' ? Math.ceil(st.apostilaPaginas / 2) : 1;
+    let custoFolha, folhasTotal;
+    if (st.papel.tamanho_fixo) {
+      custoFolha  = st.papel.custo_resma / (st.papel.folhas_resma || 1);
+      folhasTotal = Math.ceil(qtd * folhasPorExSim * (1 + perdaSim / 100));
+    } else {
+      const formatosPorResma = calcFormatosPorResma(st.papel.largura, st.papel.altura, st.formato.larg, st.formato.alt);
+      custoFolha  = (st.papel.custo_resma / st.papel.folhas_resma) / formatosPorResma;
+      const folhasLiq = Math.ceil(qtd * folhasPorExSim / st.pecasPorFolha);
+      folhasTotal = Math.ceil(folhasLiq * (1 + perdaSim / 100));
+    }
+    custoPapel = folhasTotal * custoFolha;
+    if (st.maquina && st.maquina.tipo === 'click') {
+      const boca = st.maquina.boca_cm || 33;
+      const percurso = st.formato.alt <= boca ? st.formato.larg : st.formato.alt;
+      const passesPorLado = Math.ceil(percurso / boca);
+      custoImp = folhasTotal * passesPorLado * st.lados * getCustoClickEfetivo();
+    }
+  } else if ((st.tipo === 'm2' || st.tipo === 'bobina_eco') && st.maquina) {
+    const perda = parseFloat(document.getElementById('p2_perda_m2')?.value) || 5;
+    const area = (st.larg/100) * (st.alt/100) * qtd * (1 + perda/100);
+    custoImp = area * st.maquina.custo_m2;
+    custoPapel = st.midia ? area * st.midia.custo_m2 : 0;
+  } else if (st.tipo === 'livro' && st.qtd > 0) {
+    const ratio = qtd / st.qtd;
+    custoPapel = st.custoPapel * ratio;
+    custoImp = st.custoImpressao * ratio;
+  } else if (st.tipo === 'acrilico' && st.acrilico && st.qtd > 0) {
+    const imp = calcImposicaoAcrilico(st.acrilico.largura_cm, st.acrilico.altura_cm, st.larg, st.alt);
+    const chapas = Math.ceil(qtd / Math.max(imp.pecas, 1));
+    custoPapel = chapas * st.acrilico.custo;
+    const area = (st.larg / 100) * (st.alt / 100) * qtd;
+    if (st.maquina && st.maquina.tipo === 'm2') {
+      const cmykM2 = (st.maquina.custo_m2_cmyk || 0) + (st.maquina.custo_m2_dep || 0);
+      custoImp += area * cmykM2;
+      const brancoCk = document.getElementById('p3_acril_branco_ck');
+      if (brancoCk && brancoCk.checked) custoImp += area * (st.maquina.custo_m2_branco || 0);
+      const vernizCk = document.getElementById('p3_acril_verniz_ck');
+      if (vernizCk && vernizCk.checked) custoImp += area * (st.maquina.custo_m2_verniz || 0);
+    }
+    custoImp += calcCortePorPeca() * qtd;
+  }
+  const totalAcab = Object.values(st.custoAcab).reduce((s, v) => s + (isNaN(v) ? 0 : v), 0);
+  const wireo = st.tipo === 'livro' && st.wireo.ativo && st.wireo.custo_anel > 0
+    ? st.wireo.custo_anel * st.wireo.aneis_produto * qtd * st.wireo.markup : 0;
+  const extrasLivro = st.tipo === 'livro' && st.qtd > 0
+    ? ((st.custoLaminacao||0) + (st.custoCapaDura||0)) * (qtd / st.qtd) : 0;
+  const capaApostila = st.tipo === 'apostila' && st.qtd > 0
+    ? (st.apostilaCapa.custoTotal || 0) * (qtd / st.qtd) : 0;
+  const _paginasEsp = st.componentes.filter(c => c.tipo === 'miolo').reduce((a, c) => a + (c.paginas || 0), 0);
+  const espiralApostila = st.tipo === 'apostila' && st.espiralAtivo
+    ? getCustoEspiral(_paginasEsp) * qtd : 0;
+  const custoMO = st.moMin * MO_TAXA;
+  const custoBase = custoPapel + custoImp + totalAcab + st.setup + custoMO + wireo + extrasLivro + capaApostila + espiralApostila;
+  const custo = custoBase * (1 + OVERHEAD_PCT / 100);
+  const precoBase = custo * st.markup;
+  const venda = precoBase * (1 + INVEST_VENDA_PCT / 100);
+  const margem = venda > 0 ? (venda - custo) / venda * 100 : 0;
+  return { custo, venda, margem };
+}
+
+// ── Ações finais ──────────────────────────────────────────────────────────────
+function coletarDados() {
+  const dados = {
+    nome: st.nome || 'Cálculo sem nome',
+    tipo_produto: st.tipo,
+    quantidade: st.qtd,
+    custo_total: st.custoTotal,
+    markup: st.markup,
+    preco_venda: st.precoVenda,
+    larg: st.larg, alt: st.alt,
+    papel_nome: st.tipo === 'acrilico' ? (st.acrilico?.nome || '') : (st.papel?.nome || ''),
+    formato_nome: st.formato?.nome || '',
+    maquina_nome: st.maquina?.nome || '',
+    folhas_total: st.folhasTotal,
+    clicks_total: st.clicksTotal,
+    custo_papel: st.custoPapel,
+    custo_impressao: st.custoImpressao,
+    acrilico_chapas: st.acrilicoChapassNecessarias || 0,
+    acrilico_pecas_por_chapa: st.acrilicoPecasPorChapa || 0,
+    acrilico_custo_uv: st.acrilicoCustoUV || 0,
+    acrilico_custo_branco: st.acrilicoCustoBranco || 0,
+    acrilico_custo_verniz: st.acrilicoCustoVerniz || 0,
+    acrilico_custo_corte: st.acrilicoCustoCorte || 0,
+    custo_acabamentos: st.custoAcab,
+    acabamentos_nomes: Object.fromEntries(Object.entries(st.acabSel).map(([k,v]) => [k, v.nome])),
+    setup: st.setup,
+    mo_min: st.moMin,
+    det: st._det || {},
+  };
+  if (st.tipo === 'apostila') {
+    dados.apostila_capa = {
+      tipo: st.apostilaCapa.tipo,
+      custo_total: st.apostilaCapa.custoTotal,
+      custo_papel: st.apostilaCapa.custoPapel,
+      custo_impressao: st.apostilaCapa.custoImp,
+      custo_laminacao: st.apostilaCapa.custoLaminacao,
+    };
+  }
+  if (st.tipo === 'livro') {
+    dados.componentes_livro = st.componentes.map(c => {
+      if (c.tipo === 'capa_dura') {
+        const p = PAPELAO_DATA.find(p => String(p.id) === String(c.papelaoId));
+        const t = p?.tamanhos?.find(t => String(t.id) === String(c.tamanhoId));
+        return { nome: c.nome, tipo: 'capa_dura', papelao_nome: p?.nome||'', tamanho_nome: t?.nome||'',
+          custo_capa_dura: c.custoCapaDura, custo_papel:0, custo_impressao:0, custo_laminacao:0,
+          det: c._det || {} };
+      }
+      const isCapa = c.tipo === 'capa_impressa';
+      return {
+        nome: c.nome, tipo: c.tipo,
+        papel_nome: c.papel?.nome || '', formato_nome: c.formatoNome, maquina_nome: c.maquina?.nome || '', lados: c.lados,
+        paginas: isCapa ? null : c.paginas,
+        folhas_por_exemplar: isCapa ? c.folhasDireto : Math.ceil(c.paginas / 2) / (c.miolosPorFolha || 1),
+        custo_papel: c.custoPapel, custo_impressao: c.custoImp,
+        custo_laminacao: c.custoLaminacao, custo_capa_dura: 0,
+        det: c._det || {},
+      };
+    });
+    dados.wireo = { ...st.wireo };
+    dados.custo_wireo = st.custoWireo;
+    dados.wireo_det = {
+      custo_anel: st.wireo.custo_anel,
+      aneis_produto: st.wireo.aneis_produto,
+      markup: st.wireo.markup,
+    };
+  }
+  return dados;
+}
+
+function salvarHistorico() {
+  fetch('/precificacao/salvar', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(coletarDados())
+  }).then(r => r.json()).then(d => {
+    if (d.ok) { alert('Salvo no histórico! ID: ' + d.id); }
+  });
+}
+
+function salvarOrcamento() {
+  const dados = coletarDados();
+  sessionStorage.setItem('calc_para_orcamento', JSON.stringify(dados));
+  window.location.href = '/orcamentos/novo?from_calc=1';
+}
+
+function salvarProduto() {
+  if (!st.qtd || st.custoTotal <= 0) {
+    alert('Calcule o produto completamente antes de salvar.');
+    return;
+  }
+  document.getElementById('modal-prod-nome').value = st.nome || '';
+  const base = st.qtd;
+  const faixas = [
+    Math.round(base * 0.25), Math.round(base * 0.5), base,
+    Math.round(base * 2), Math.round(base * 5)
+  ].filter((v, i, a) => v > 0 && a.indexOf(v) === i).sort((a,b)=>a-b);
+  let html = '<table class="tabela-precos"><thead><tr><th>Qtd</th><th style="text-align:right">Unit.</th><th style="text-align:right">Total</th><th style="text-align:right">Custo/un</th></tr></thead><tbody>';
+  faixas.forEach(q => {
+    const r = simularCalculo(q);
+    const unit = r.venda / q;
+    const custo = r.custo / q;
+    const cls = q === base ? 'class="atual"' : '';
+    html += `<tr ${cls}><td>${q}</td><td>R$ ${unit.toFixed(2)}</td><td>R$ ${r.venda.toFixed(2)}</td><td style="color:var(--texto-muted)">R$ ${custo.toFixed(4)}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('modal-prod-faixas-preview').innerHTML = html;
+  document.getElementById('modal-salvar-produto').style.display = 'flex';
+  lucide.createIcons();
+}
+
+function confirmarSalvarProduto() {
+  const nome = document.getElementById('modal-prod-nome').value.trim();
+  if (!nome) { alert('Informe o nome do produto.'); return; }
+  const unidade = document.getElementById('modal-prod-unidade').value || 'UN';
+  const base = st.qtd;
+  const faixas = [
+    Math.round(base * 0.25), Math.round(base * 0.5), base,
+    Math.round(base * 2), Math.round(base * 5)
+  ].filter((v, i, a) => v > 0 && a.indexOf(v) === i).sort((a,b)=>a-b).map(q => {
+    const r = simularCalculo(q);
+    return { qtd: q, preco: parseFloat((r.venda / q).toFixed(4)), custo: parseFloat((r.custo / q).toFixed(4)) };
+  });
+  fetch('/precificacao/salvar_produto', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ ...coletarDados(), nome, unidade, faixas })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      document.getElementById('modal-salvar-produto').style.display = 'none';
+      alert(`✓ Produto "${nome}" salvo no catálogo!\n\nAcesse Produtos para visualizar e editar.`);
+    }
+  }).catch(() => alert('Erro ao salvar produto. Tente novamente.'));
+}
+
+function imprimirFicha() {
+  window.open('/precificacao/ficha?' + new URLSearchParams({dados: JSON.stringify(coletarDados())}), '_blank');
+}
+
+function copiarWhatsApp() {
+  const unit = st.qtd > 0 ? (st.precoVenda / st.qtd).toFixed(2) : '0,00';
+  const txt = `*Orçamento — ${st.nome || 'Produto'}*\n`
+    + `Quantidade: ${st.qtd} unidades\n`
+    + `Preço unitário: R$ ${unit}\n`
+    + `*Total: R$ ${st.precoVenda.toFixed(2)}*\n\n`
+    + `_Válido por 7 dias. Entre em contato para fechar o pedido._`;
+  navigator.clipboard.writeText(txt).then(() => {
+    alert('Mensagem copiada! Cole no WhatsApp.');
+  });
+}
+
+function novoCalculo() {
+  if (confirm('Começar um novo cálculo? Os dados atuais serão perdidos.')) {
+    window.location.reload();
+  }
+}
+
+// ── Livro / Apostila ──────────────────────────────────────────────────────────
+function addComponente(tipo) {
+  const id = st.nextCompId++;
+  const nomes = {miolo:'Miolo', capa_impressa:'Capa Impressa', capa_dura:'Capa Dura'};
+  const base = {
+    id, nome: nomes[tipo] || 'Componente', tipo: tipo || 'miolo',
+    papelaoId:null, tamanhoId:null, papalaoQtdPorEx:2,
+    custoPapel:0, custoImp:0, custoLaminacao:0, custoCapaDura:0, custo:0
+  };
+  if (tipo === 'capa_dura') {
+    st.componentes.push(base);
+  } else {
+    st.componentes.push(Object.assign(base, {
+      papelId:'', papel:null, formatoNome:'', formato:null, maqId:'', maquina:null,
+      lados: tipo === 'capa_impressa' ? 1 : 2,
+      paginas: tipo === 'capa_impressa' ? 4 : 100, folhasDireto:1, miolosPorFolha:1, perda:5,
+      temLaminacao:false, laminacaoAcabId:null, laminacaoBobinaLarg:0, laminacaoBobinaCusto:0,
+      laminacaoBobinaComp:0, laminacaoMarkup:2.0, laminacaoLados:1,
+    }));
+  }
+  renderLivroComponentes();
+  recalcular();
+}
+
+function removeComponente(idx) {
+  if (st.componentes.length <= 1) return;
+  st.componentes.splice(idx, 1);
+  renderLivroComponentes();
+  recalcular();
+}
+
+function onCompPapelChange(idx, sel) {
+  const p = PAPEIS_DATA.find(p => String(p.id) === sel.value) || null;
+  st.componentes[idx].papelId = sel.value;
+  st.componentes[idx].papel = p;
+  st.componentes[idx].formatoNome = '';
+  st.componentes[idx].formato = null;
+  renderLivroComponentes();
+  recalcular();
+}
+
+function onCompFormatoChange(idx, sel) {
+  const f = FORMATOS.find(f => f.nome === sel.value) || null;
+  st.componentes[idx].formatoNome = sel.value;
+  st.componentes[idx].formato = f;
+  recalcular();
+  renderLivroComponentes();
+}
+
+function onCompMaqChange(idx, sel) {
+  const m = MAQUINAS_DATA.find(m => String(m.id) === sel.value) || null;
+  st.componentes[idx].maqId = sel.value;
+  st.componentes[idx].maquina = m ? {
+    id:m.id, nome:m.nome, tipo:m.tipo, boca_cm:m.boca_cm,
+    custo_click: (m.custo_click_toner||0)+(m.custo_click_manutencao||0)+(m.custo_click_depreciacao||0),
+    custo_m2: (m.custo_m2_material||0)+(m.custo_m2_impressao||0)+(m.custo_m2_depreciacao||0),
+  } : null;
+  recalcular();
+  renderLivroComponentes();
+}
+
+function onCompLadosChange(idx, sel) {
+  st.componentes[idx].lados = parseInt(sel.value);
+  recalcular();
+  renderLivroComponentes();
+}
+
+function onCompPaginasChange(idx, v) {
+  const n = parseInt(v);
+  st.componentes[idx].paginas = isNaN(n) || n < 1 ? 1 : n;
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompFolhasDiretoChange(idx, v) {
+  const n = parseFloat(v);
+  st.componentes[idx].folhasDireto = isNaN(n) || n <= 0 ? 1 : n;
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompMiolosPorFolhaChange(idx, v) {
+  st.componentes[idx].miolosPorFolha = parseInt(v) || 1;
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompPerdaChange(idx, v) {
+  const n = parseFloat(v);
+  st.componentes[idx].perda = isNaN(n) || n < 0 ? 0 : n;
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompToggleLaminacao(idx, cb) {
+  st.componentes[idx].temLaminacao = cb.checked;
+  // Auto-seleciona a primeira bobina cadastrada
+  if (cb.checked && !st.componentes[idx].laminacaoAcabId && BOBINAS_DATA.length > 0) {
+    const b = BOBINAS_DATA[0];
+    st.componentes[idx].laminacaoAcabId       = b.id;
+    st.componentes[idx].laminacaoBobinaLarg   = b.bobina_largura;
+    st.componentes[idx].laminacaoBobinaCusto  = b.bobina_custo;
+    st.componentes[idx].laminacaoBobinaComp   = b.bobina_comprimento;
+    st.componentes[idx].laminacaoMarkup       = b.markup || 2.0;
+  }
+  renderLivroComponentes();
+  recalcular();
+}
+
+function onCompLaminacaoSelect(idx, sel) {
+  if (!sel.value) {
+    st.componentes[idx].laminacaoAcabId = null;
+    st.componentes[idx].laminacaoBobinaLarg = 0;
+    st.componentes[idx].laminacaoBobinaCusto = 0;
+    st.componentes[idx].laminacaoBobinaComp = 0;
+  } else {
+    const b = BOBINAS_DATA.find(b => String(b.id) === sel.value);
+    if (b) {
+      st.componentes[idx].laminacaoAcabId      = b.id;
+      st.componentes[idx].laminacaoBobinaLarg  = b.bobina_largura;
+      st.componentes[idx].laminacaoBobinaCusto = b.bobina_custo;
+      st.componentes[idx].laminacaoBobinaComp  = b.bobina_comprimento;
+      st.componentes[idx].laminacaoMarkup      = b.markup || 2.0;
+    }
+  }
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompLaminacaoLados(idx, v) {
+  st.componentes[idx].laminacaoLados = parseInt(v);
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompPapelaoSelect(idx, sel) {
+  st.componentes[idx].papelaoId = sel.value || null;
+  st.componentes[idx].tamanhoId = null;
+  renderLivroComponentes();
+  recalcular();
+}
+
+function onCompTamanhoSelect(idx, sel) {
+  st.componentes[idx].tamanhoId = sel.value || null;
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompPapelaoSangria(idx, v) {
+  const n = parseFloat(v);
+  st.componentes[idx].papelaoSangria = isNaN(n) ? 0 : n;
+  recalcular();
+  updateLivroResumos();
+}
+
+function onCompPapelaoQtd(idx, v) {
+  const n = parseInt(v);
+  st.componentes[idx].papalaoQtdPorEx = isNaN(n) || n < 1 ? 1 : n;
+  recalcular();
+  updateLivroResumos();
+}
+
+function calcComponente(comp) {
+  // ── Capa Dura (papelão) ──
+  if (comp.tipo === 'capa_dura') {
+    comp.custoPapel = 0; comp.custoImp = 0; comp.custoLaminacao = 0;
+    const p = PAPELAO_DATA.find(p => String(p.id) === String(comp.papelaoId));
+    const t = p?.tamanhos?.find(t => String(t.id) === String(comp.tamanhoId));
+    if (p && t && t.largura > 0 && t.altura > 0 && st.qtd > 0) {
+      const n1 = Math.floor(p.largura / t.largura) * Math.floor(p.altura / t.altura);
+      const n2 = Math.floor(p.largura / t.altura) * Math.floor(p.altura / t.largura);
+      const porFolha = Math.max(n1, n2, 1);
+      const totalPecas = st.qtd * (comp.papalaoQtdPorEx || 2);
+      const folhasPapelao = Math.ceil(totalPecas / porFolha);
+      comp.custoCapaDura = folhasPapelao * p.custo;
+      comp._det = {
+        papelao_larg: p.largura, papelao_alt: p.altura,
+        tamanho_larg: t.largura, tamanho_alt: t.altura,
+        pecas_por_ex: comp.papalaoQtdPorEx || 2,
+        total_pecas: totalPecas, pecas_por_folha: porFolha,
+        folhas_papelao: folhasPapelao, custo_folha_papelao: p.custo,
+      };
+    } else {
+      comp.custoCapaDura = 0;
+      comp._det = {};
+    }
+    comp.custo = comp.custoCapaDura;
+    return;
+  }
+  // ── Miolo / Capa Impressa ──
+  const isCapa = comp.tipo === 'capa_impressa';
+  const miolosPorFolha = (!isCapa && comp.miolosPorFolha > 1) ? comp.miolosPorFolha : 1;
+  const folhasPorExemplar = isCapa
+    ? Math.max(comp.folhasDireto || 1, 0.01)
+    : Math.ceil(comp.paginas / 2) / miolosPorFolha;
+  if (!comp.papel || !comp.formato || !comp.maquina || !st.qtd) {
+    comp.custoPapel = 0; comp.custoImp = 0; comp.custoLaminacao = 0; comp.custoCapaDura = 0; comp.custo = 0;
+    comp._det = {};
+    return;
+  }
+  const fpr = Math.max(calcFormatosPorResma(comp.papel.largura, comp.papel.altura, comp.formato.larg, comp.formato.alt), 1);
+  const custoFolha = (comp.papel.custo_resma / comp.papel.folhas_resma) / fpr;
+  const folhasTotal = Math.ceil(st.qtd * folhasPorExemplar * (1 + comp.perda / 100));
+  comp.custoPapel = folhasTotal * custoFolha;
+  const det = {
+    maquina_tipo: comp.maquina.tipo, fpr, custo_folha: custoFolha,
+    folhas_por_exemplar: folhasPorExemplar, folhas_total: folhasTotal, perda_pct: comp.perda,
+    papel_larg: comp.papel.largura, papel_alt: comp.papel.altura,
+    formato_larg: comp.formato.larg, formato_alt: comp.formato.alt,
+    lados: comp.lados, boca_cm: comp.maquina.boca_cm || 0,
+  };
+  let custoImp = 0;
+  if (comp.maquina.tipo === 'click') {
+    const cf = Math.ceil(comp.formato.alt / comp.maquina.boca_cm) * comp.lados;
+    custoImp = folhasTotal * cf * comp.maquina.custo_click;
+    det.clicks_por_folha = cf;
+    det.clicks_total = folhasTotal * cf;
+    det.custo_click = comp.maquina.custo_click;
+  } else if (comp.maquina.tipo === 'm2') {
+    const area = (comp.formato.larg / 100) * (comp.formato.alt / 100) * folhasTotal;
+    custoImp = area * comp.maquina.custo_m2;
+    det.area_m2 = area;
+    det.custo_m2_maq = comp.maquina.custo_m2;
+  }
+  comp.custoImp = custoImp;
+  comp.custoCapaDura = 0;
+  if (comp.temLaminacao && comp.laminacaoBobinaLarg > 0 && comp.laminacaoBobinaComp > 0) {
+    const mPorFolha = calcMetrosPorFolha(comp.laminacaoBobinaLarg, comp.formato.larg, comp.formato.alt);
+    const custoPorMetro = comp.laminacaoBobinaCusto / comp.laminacaoBobinaComp;
+    comp.custoLaminacao = folhasTotal * mPorFolha * custoPorMetro * comp.laminacaoMarkup * comp.laminacaoLados;
+    det.lam_metros_por_folha = mPorFolha;
+    det.lam_custo_por_metro = custoPorMetro;
+    det.lam_markup = comp.laminacaoMarkup;
+    det.lam_lados = comp.laminacaoLados;
+    det.lam_metros_total = folhasTotal * mPorFolha;
+  } else {
+    comp.custoLaminacao = 0;
+  }
+  comp._det = det;
+  comp.custo = comp.custoPapel + comp.custoImp + comp.custoLaminacao;
+}
+
+function calcLivro() {
+  st.componentes.forEach(c => calcComponente(c));
+  st.custoPapel      = st.componentes.reduce((s,c) => s + c.custoPapel, 0);
+  st.custoImpressao  = st.componentes.reduce((s,c) => s + c.custoImp, 0);
+  st.custoLaminacao  = st.componentes.reduce((s,c) => s + (c.custoLaminacao||0), 0);
+  st.custoCapaDura   = st.componentes.reduce((s,c) => s + (c.custoCapaDura||0), 0);
+  st.folhasTotal     = st.componentes.reduce((s,c) => {
+    if (c.tipo === 'capa_dura' || !c.papel || !c.formato || !st.qtd) return s;
+    const mpf = (c.tipo === 'miolo' && c.miolosPorFolha > 1) ? c.miolosPorFolha : 1;
+    const fpEx = c.tipo === 'capa_impressa' ? Math.max(c.folhasDireto||1, 0.01) : Math.ceil(c.paginas / 2) / mpf;
+    return s + Math.ceil(st.qtd * fpEx * (1 + c.perda / 100));
+  }, 0);
+  // Wire-O (usa custo_anel do acabamento selecionado)
+  if (st.wireo.ativo && st.wireo.custo_anel > 0 && st.qtd > 0) {
+    st.custoWireo = st.wireo.custo_anel * st.wireo.aneis_produto * st.qtd * st.wireo.markup;
+  } else {
+    st.custoWireo = 0;
+  }
+  const prev = document.getElementById('wireo_preview');
+  if (prev && st.wireo.ativo) {
+    prev.textContent = `Custo/anel: R$ ${st.wireo.custo_anel.toFixed(4)} · Total (${st.qtd} prod.): R$ ${st.custoWireo.toFixed(2)}`;
+  }
+}
+
+function updateLivroResumos() {
+  st.componentes.forEach(comp => {
+    const el = document.getElementById('livro-resumo-' + comp.id);
+    if (!el) return;
+    if (comp.custo > 0) {
+      let partes = [];
+      if (comp.tipo === 'capa_dura') {
+        const p = PAPELAO_DATA.find(p => String(p.id) === String(comp.papelaoId));
+        const t = p?.tamanhos?.find(t => String(t.id) === String(comp.tamanhoId));
+        if (p) partes.push(`<span>${p.nome}</span>`);
+        if (t) partes.push(`<span>Tamanho: <strong>${t.nome} (${t.largura}×${t.altura}cm)</strong></span>`);
+        partes.push(`<span>${comp.papalaoQtdPorEx||2} peças/ex</span>`);
+        partes.push(`<span style="color:var(--primaria);font-weight:700;">Subtotal: R$ ${comp.custo.toFixed(2)}</span>`);
+      } else {
+        const isCapa = comp.tipo === 'capa_impressa';
+        const mpf = (!isCapa && comp.miolosPorFolha > 1) ? comp.miolosPorFolha : 1;
+        const fpEx = isCapa ? (comp.folhasDireto||1) : Math.ceil(comp.paginas / 2) / mpf;
+        const ganhoStr = mpf > 1 ? ` · <strong style="color:var(--sucesso);">${mpf} miolos/folha</strong>` : '';
+        const infoStr = isCapa ? `${fpEx} folha(s)/ex` : `${comp.paginas} págs → <strong>${fpEx.toFixed(1)} folhas/ex</strong>${ganhoStr}`;
+        partes.push(`<span>${infoStr}</span>`);
+        partes.push(`<span>Papel: <strong>R$ ${comp.custoPapel.toFixed(2)}</strong></span>`);
+        partes.push(`<span>Impressão: <strong>R$ ${comp.custoImp.toFixed(2)}</strong></span>`);
+        if (comp.custoLaminacao > 0) partes.push(`<span>Laminação (${comp.laminacaoLados}L): <strong>R$ ${comp.custoLaminacao.toFixed(2)}</strong></span>`);
+        partes.push(`<span style="color:var(--primaria);font-weight:700;">Subtotal: R$ ${comp.custo.toFixed(2)}</span>`);
+      }
+      el.innerHTML = `<div class="livro-comp-resumo">${partes.join('')}</div>`;
+    } else {
+      el.innerHTML = '';
+    }
+  });
+}
+
+function renderLivroComponentes() {
+  const cont = document.getElementById('livro-comp-lista');
+  if (!cont) return;
+  cont.innerHTML = st.componentes.map((comp, idx) => {
+    const papeisOpts = PAPEIS_DATA.map(p =>
+      `<option value="${p.id}" ${String(comp.papelId)===String(p.id)?'selected':''}>${p.nome} — ${p.largura}×${p.altura}cm</option>`
+    ).join('');
+    let formatosOpts = comp.papel ? '<option value="">— Formato —</option>' : '<option value="">— Escolha o papel primeiro —</option>';
+    if (comp.papel) {
+      FORMATOS.filter(f => f.nome !== 'Personalizado' && f.larg > 0).forEach(f => {
+        const n = calcFormatosPorResma(comp.papel.largura, comp.papel.altura, f.larg, f.alt);
+        if (n >= 1) formatosOpts += `<option value="${f.nome}" ${comp.formatoNome===f.nome?'selected':''}>${f.nome} (${f.larg}×${f.alt}cm) — ${n}x/resma</option>`;
+      });
+    }
+    const maqOpts = MAQUINAS_DATA.map(m =>
+      `<option value="${m.id}" ${String(comp.maqId)===String(m.id)?'selected':''}>${m.nome}</option>`
+    ).join('');
+    // ── Capa Dura: UI diferente ──
+    if (comp.tipo === 'capa_dura') {
+      const papelaoOpts = PAPELAO_DATA.map(p =>
+        `<option value="${p.id}" ${String(comp.papelaoId)===String(p.id)?'selected':''}>${p.nome} — ${p.largura}×${p.altura}cm</option>`
+      ).join('');
+      const papSel = PAPELAO_DATA.find(p => String(p.id) === String(comp.papelaoId));
+      const tamanhoOpts = papSel?.tamanhos?.length
+        ? papSel.tamanhos.map(t => `<option value="${t.id}" ${String(comp.tamanhoId)===String(t.id)?'selected':''}>${t.nome} — ${t.largura}×${t.altura}cm</option>`).join('')
+        : '';
+      return `<div class="livro-comp" style="border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.04);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="text" class="form-control" value="${comp.nome}" style="max-width:180px;font-weight:600;"
+              oninput="st.componentes[${idx}].nome = this.value">
+            <span style="font-size:.72rem;background:rgba(245,158,11,.15);color:#b45309;border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:2px 8px;font-weight:700;">CAPA DURA</span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="removeComponente(${idx})"><i data-lucide="x"></i></button>
+        </div>
+        ${PAPELAO_DATA.length === 0 ? `
+          <p class="text-muted text-sm">Nenhum papelão cadastrado. <a href="/precificacao/configuracoes#papelao">Cadastrar agora</a></p>
+        ` : `
+        <div class="form-grid form-grid-3" style="margin-bottom:10px;">
+          <div class="form-group">
+            <label style="font-size:.8rem;">Tipo de Papelão</label>
+            <select class="form-control" onchange="onCompPapelaoSelect(${idx}, this)">
+              <option value="">— Selecionar —</option>${papelaoOpts}
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:.8rem;">Tamanho da Capa</label>
+            <select class="form-control" onchange="onCompTamanhoSelect(${idx}, this)" ${!papSel||!papSel.tamanhos?.length?'disabled':''}>
+              <option value="">— ${papSel ? (papSel.tamanhos?.length ? 'Selecionar tamanho' : 'Sem tamanhos cadastrados') : 'Escolha o papelão primeiro'} —</option>
+              ${tamanhoOpts}
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:.8rem;">Peças/exemplar</label>
+            <input type="number" class="form-control" value="${comp.papalaoQtdPorEx||2}" min="1" step="1"
+              oninput="onCompPapelaoQtd(${idx}, this.value)">
+          </div>
+        </div>
+        `}
+        <div id="livro-resumo-${comp.id}"></div>
+      </div>`;
+    }
+    return `<div class="livro-comp">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="text" class="form-control" value="${comp.nome}" style="max-width:180px;font-weight:600;"
+            oninput="st.componentes[${idx}].nome = this.value">
+          <span style="font-size:.72rem;background:var(--fundo);border:1px solid var(--borda);border-radius:12px;padding:2px 8px;color:var(--texto-muted);">${comp.tipo === 'capa_impressa' ? 'CAPA IMPRESSA' : 'MIOLO'}</span>
+        </div>
+        ${idx > 0 ? `<button type="button" class="btn btn-ghost btn-sm" onclick="removeComponente(${idx})"><i data-lucide="x"></i></button>` : '<span></span>'}
+      </div>
+      <div class="form-grid form-grid-3" style="margin-bottom:10px;">
+        <div class="form-group">
+          <label style="font-size:.8rem;">Papel</label>
+          <select class="form-control" onchange="onCompPapelChange(${idx}, this)">
+            <option value="">— Papel —</option>${papeisOpts}
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="font-size:.8rem;">Formato</label>
+          <select class="form-control" onchange="onCompFormatoChange(${idx}, this)" ${!comp.papel?'disabled':''}>
+            ${formatosOpts}
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="font-size:.8rem;">Máquina</label>
+          <select class="form-control" onchange="onCompMaqChange(${idx}, this)">
+            <option value="">— Máquina —</option>${maqOpts}
+          </select>
+        </div>
+      </div>
+      <div class="${comp.tipo === 'miolo' ? 'form-grid form-grid-4' : 'form-grid form-grid-3'}">
+        <div class="form-group">
+          <label style="font-size:.8rem;">Impressão</label>
+          <select class="form-control" onchange="onCompLadosChange(${idx}, this)">
+            <option value="1" ${comp.lados==1?'selected':''}>4×0 (só frente)</option>
+            <option value="2" ${comp.lados==2?'selected':''}>4×4 (frente e verso)</option>
+          </select>
+        </div>
+        ${comp.tipo === 'capa_impressa' ? `
+        <div class="form-group">
+          <label style="font-size:.8rem;">Folhas/exemplar <span style="font-weight:400;color:var(--texto-muted);">(ex: 0.5 para A5)</span></label>
+          <input type="number" class="form-control" value="${comp.folhasDireto}" min="0.5" step="0.5"
+            oninput="onCompFolhasDiretoChange(${idx}, this.value)">
+        </div>
+        ` : `
+        <div class="form-group">
+          <label style="font-size:.8rem;">Páginas/exemplar</label>
+          <input type="number" class="form-control" value="${comp.paginas}" min="1" step="1"
+            oninput="onCompPaginasChange(${idx}, this.value)">
+        </div>
+        `}
+        ${comp.tipo === 'miolo' ? `
+        <div class="form-group">
+          <label style="font-size:.8rem;">Miolos por folha</label>
+          <select class="form-control" onchange="onCompMiolosPorFolhaChange(${idx}, this.value)">
+            <option value="1" ${(comp.miolosPorFolha||1)==1?'selected':''}>1 miolo/folha (normal)</option>
+            <option value="2" ${comp.miolosPorFolha==2?'selected':''}>2 miolos/folha (cortar ao meio)</option>
+          </select>
+        </div>
+        ` : ''}
+        <div class="form-group">
+          <label style="font-size:.8rem;">Perda (%)</label>
+          <input type="number" class="form-control" value="${comp.perda}" min="0" step="0.5"
+            oninput="onCompPerdaChange(${idx}, this.value)">
+        </div>
+      </div>
+
+      <!-- Laminação -->
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--borda);">
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
+          <input type="checkbox" ${comp.temLaminacao?'checked':''} onchange="onCompToggleLaminacao(${idx}, this)">
+          Laminação
+        </label>
+        ${comp.temLaminacao ? `
+        <div style="margin-top:8px;padding:10px;background:rgba(59,130,246,.06);border-radius:6px;border:1px solid rgba(59,130,246,.2);">
+          ${BOBINAS_DATA.length === 0 ? `<p style="font-size:.8rem;color:var(--texto-muted);margin:0;">Nenhuma bobina cadastrada. <a href="/precificacao/configuracoes#acabamentos">Cadastrar</a></p>` : `
+          <div class="form-group" style="margin:0 0 8px 0;">
+            <label style="font-size:.78rem;">Bobina de Laminação</label>
+            <select class="form-control" onchange="onCompLaminacaoSelect(${idx}, this)">
+              <option value="">— Selecionar Bobina —</option>
+              ${BOBINAS_DATA.map(b => `<option value="${b.id}" ${String(comp.laminacaoAcabId)===String(b.id)?'selected':''}>${b.nome} — ${b.bobina_largura}cm × ${b.bobina_comprimento}m</option>`).join('')}
+            </select>
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:4px;cursor:pointer;">
+              <input type="radio" name="lam-lados-${comp.id}" value="1" ${comp.laminacaoLados==1?'checked':''} onchange="onCompLaminacaoLados(${idx}, 1)"> 1 lado
+            </label>
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:4px;cursor:pointer;">
+              <input type="radio" name="lam-lados-${comp.id}" value="2" ${comp.laminacaoLados==2?'checked':''} onchange="onCompLaminacaoLados(${idx}, 2)"> 2 lados
+            </label>
+          </div>
+          `}
+        </div>
+        ` : ''}
+      </div>
+
+      <div id="livro-resumo-${comp.id}"></div>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+  updateLivroResumos();
+}
+
+// ── Capa da Apostila ─────────────────────────────────────────────────────────
+function selecionarCapaTipo(tipo, el) {
+  ['capa-tipo-nenhuma','capa-tipo-plastico','capa-tipo-impressa'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.classList.remove('selecionado');
+  });
+  if (el) el.classList.add('selecionado');
+  st.apostilaCapa.tipo = tipo;
+  document.getElementById('capa_plastico_info').style.display   = tipo === 'plastico' ? 'block' : 'none';
+  document.getElementById('capa_impressa_opts').style.display   = tipo === 'impressa' ? 'block' : 'none';
+  recalcular();
+}
+
+function selecionarCapaPapel() {
+  const sel = document.getElementById('capa_papel_sel');
+  const opt = sel ? sel.selectedOptions[0] : null;
+  if (!opt || !opt.value) {
+    st.apostilaCapa.papel = null; st.apostilaCapa.formato = null;
+    document.getElementById('capa_formato_wrap').style.display = 'none';
+    document.getElementById('capa_imposicao_box').style.display = 'none';
+    recalcular(); return;
+  }
+  st.apostilaCapa.papel = {
+    id: opt.value, nome: opt.dataset.nome,
+    largura: parseFloat(opt.dataset.larg), altura: parseFloat(opt.dataset.alt),
+    custo_resma: parseFloat(opt.dataset.resma), folhas_resma: parseInt(opt.dataset.folhas),
+    fator_perda: parseFloat(opt.dataset.perda),
+    tamanho_fixo: parseInt(opt.dataset.fixo) === 1,
+  };
+  st.apostilaCapa.perda = st.apostilaCapa.papel.fator_perda;
+  if (st.apostilaCapa.papel.tamanho_fixo) {
+    st.apostilaCapa.formato = { nome: st.apostilaCapa.papel.nome, larg: st.apostilaCapa.papel.largura, alt: st.apostilaCapa.papel.altura };
+    document.getElementById('capa_formato_wrap').style.display = 'none';
+  } else {
+    st.apostilaCapa.formato = null;
+    iniciarCapaFormatoGrid();
+    document.getElementById('capa_formato_wrap').style.display = 'block';
+  }
+  recalcular();
+}
+
+function iniciarCapaFormatoGrid() {
+  const grid = document.getElementById('capa_formato_grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  FORMATOS.forEach(f => {
+    if (f.nome === 'Personalizado') return;
+    const card = document.createElement('div');
+    card.className = 'formato-card';
+    card.style.cssText = 'border:1.5px solid var(--borda);border-radius:6px;padding:7px 4px;cursor:pointer;text-align:center;';
+    card.innerHTML = `<div class="fn" style="font-size:.82rem;">${f.nome}</div><div class="fd" style="font-size:.65rem;">${f.larg}×${f.alt}</div>`;
+    card.onclick = () => selecionarCapaFormato(f, card);
+    grid.appendChild(card);
+  });
+}
+
+function selecionarCapaFormato(f, card) {
+  document.querySelectorAll('#capa_formato_grid .formato-card').forEach(c => c.classList.remove('selecionado'));
+  card.classList.add('selecionado');
+  st.apostilaCapa.formato = { nome: f.nome, larg: f.larg, alt: f.alt };
+  recalcular();
+}
+
+function selecionarCapaLados(n, el) {
+  document.querySelectorAll('#capa_lados_wrap .tipo-card').forEach(c => c.classList.remove('selecionado'));
+  el.classList.add('selecionado');
+  st.apostilaCapa.lados = n;
+  recalcular();
+}
+
+function toggleCapaLaminacao(cb) {
+  st.apostilaCapa.temLaminacao = cb.checked;
+  document.getElementById('capa_lam_params').style.display = cb.checked ? 'block' : 'none';
+  recalcular();
+}
+
+function calcApostilaCapa() {
+  const ac = st.apostilaCapa;
+  ac.custoPapel = 0; ac.custoImp = 0; ac.custoLaminacao = 0; ac.custoTotal = 0;
+  ac.pecasPorFolha = 0; ac.folhasTotal = 0;
+
+  // Atualiza display do custo plástico
+  const unitEl = document.getElementById('capa_plastico_unit_display');
+  const totEl  = document.getElementById('capa_plastico_total_display');
+  if (unitEl) unitEl.textContent = 'R$ ' + ac.custoPlasticoUnit.toFixed(2);
+
+  if (ac.tipo === 'nenhuma') {
+    if (totEl) totEl.textContent = 'R$ 0,00';
+    document.getElementById('capa_impressa_resumo').style.display = 'none';
+    document.getElementById('capa_imposicao_box').style.display = 'none';
+    document.getElementById('capa_lados_wrap').style.display = 'none';
+    document.getElementById('capa_lam_wrap').style.display = 'none';
+    return;
+  }
+
+  if (ac.tipo === 'plastico') {
+    ac.custoTotal = ac.custoPlasticoUnit * st.qtd;
+    if (totEl) totEl.textContent = 'R$ ' + ac.custoTotal.toFixed(2);
+    return;
+  }
+
+  // impressa
+  if (!ac.papel || !ac.formato || !st.larg || !st.alt || !st.qtd) {
+    document.getElementById('capa_lados_wrap').style.display = ac.papel ? 'block' : 'none';
+    document.getElementById('capa_lam_wrap').style.display = ac.papel ? 'block' : 'none';
+    document.getElementById('capa_impressa_resumo').style.display = 'none';
+    document.getElementById('capa_imposicao_box').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('capa_lados_wrap').style.display = 'block';
+  document.getElementById('capa_lam_wrap').style.display = 'block';
+
+  // Capa geralmente = mesma dimensão do produto final (frente+verso em 1 folha)
+  // 1 folha de capa cobre 1 apostila (dobrada: cobre capa+contra-capa)
+  // imposição: quantas capas cabem por folha de impressão
+  let custoFolha, imp;
+  if (ac.papel.tamanho_fixo) {
+    custoFolha = ac.papel.custo_resma / (ac.papel.folhas_resma || 1);
+    ac.pecasPorFolha = 1;
+    ac.folhasTotal = Math.ceil(st.qtd * (1 + ac.perda / 100));
+  } else {
+    const fmtsPorResma = calcFormatosPorResma(ac.papel.largura, ac.papel.altura, ac.formato.larg, ac.formato.alt);
+    custoFolha = (ac.papel.custo_resma / ac.papel.folhas_resma) / fmtsPorResma;
+    imp = calcImposicao(ac.formato.larg, ac.formato.alt, st.larg, st.alt);
+    ac.pecasPorFolha = imp.pecas;
+    const folhasLiq = Math.ceil(st.qtd / ac.pecasPorFolha);
+    ac.folhasTotal = Math.ceil(folhasLiq * (1 + ac.perda / 100));
+  }
+  ac.custoPapel = ac.folhasTotal * custoFolha;
+
+  // Impressão da capa
+  const selMaq = document.getElementById('capa_maq_sel');
+  const maqOpt = selMaq ? selMaq.selectedOptions[0] : null;
+  if (maqOpt && maqOpt.value) {
+    const custo_click = (parseFloat(maqOpt.dataset.toner)||0) + (parseFloat(maqOpt.dataset.manut)||0) + (parseFloat(maqOpt.dataset.deprec)||0);
+    const boca = parseFloat(maqOpt.dataset.boca) || 33;
+    const percurso = ac.formato.alt <= boca ? ac.formato.larg : ac.formato.alt;
+    const clicksFolha = Math.ceil(percurso / boca) * ac.lados;
+    ac.custoImp = ac.folhasTotal * clicksFolha * custo_click;
+  }
+
+  // Laminação da capa
+  if (ac.temLaminacao) {
+    const lamSel = document.getElementById('capa_lam_sel');
+    const lamOpt = lamSel ? lamSel.selectedOptions[0] : null;
+    if (lamOpt && lamOpt.value) {
+      const lamComp = parseFloat(lamOpt.dataset.comp) || 0;
+      const lamCusto = parseFloat(lamOpt.dataset.custo) || 0;
+      const lamLarg = parseFloat(lamOpt.dataset.larg) || 32;
+      const lamMarkup = parseFloat(lamOpt.dataset.markup) || 2.0;
+      if (lamComp > 0) {
+        const custoPorMetro = lamCusto / lamComp;
+        const mPorFolha = calcMetrosPorFolha(lamLarg, ac.formato.larg, ac.formato.alt);
+        const lamLados = parseInt(document.querySelector('input[name="capa-lam-lados"]:checked')?.value || 1);
+        ac.custoLaminacao = ac.folhasTotal * mPorFolha * custoPorMetro * lamMarkup * lamLados;
+      }
+    }
+  } else {
+    ac.custoLaminacao = 0;
+  }
+
+  ac.custoTotal = ac.custoPapel + ac.custoImp + ac.custoLaminacao;
+
+  // Update UI
+  const impBox = document.getElementById('capa_imposicao_box');
+  if (impBox) {
+    impBox.style.display = 'block';
+    document.getElementById('capa_pecas_num').textContent = ac.pecasPorFolha;
+    document.getElementById('capa_folhas_num').textContent = ac.folhasTotal;
+    document.getElementById('capa_custo_papel_display').textContent = 'R$ ' + ac.custoPapel.toFixed(2);
+  }
+  const resumo = document.getElementById('capa_impressa_resumo');
+  if (resumo) {
+    resumo.style.display = 'block';
+    document.getElementById('capa_impressa_total_display').textContent = 'R$ ' + ac.custoTotal.toFixed(2);
+  }
+}
+
+// ── Wire-O ────────────────────────────────────────────────────────────────────
+function toggleWireo(cb) {
+  st.wireo.ativo = cb.checked;
+  document.getElementById('wireo_params').style.display = cb.checked ? 'block' : 'none';
+  recalcular();
+}
+
+function toggleEspiral(cb) {
+  st.espiralAtivo = cb.checked;
+  document.getElementById('espiral_info').style.display = cb.checked ? 'block' : 'none';
+  if (cb.checked) {
+    const _pEsp = st.componentes.filter(c => c.tipo === 'miolo').reduce((a, c) => a + (c.paginas || 0), 0);
+    const _cEsp = getCustoEspiral(_pEsp);
+    document.getElementById('espiral_unit_display').textContent = 'R$ ' + _cEsp.toFixed(2).replace('.', ',');
+    document.getElementById('espiral_total_display').textContent = 'R$ ' + (_cEsp * (st.qtd || 1)).toFixed(2).replace('.', ',');
+  }
+  recalcular();
+}
+
+function recalcularWireo() {
+  const sel = document.getElementById('wireo_tipo_sel');
+  if (sel && sel.value) {
+    const opt = sel.selectedOptions[0];
+    st.wireo.acabId    = sel.value;
+    st.wireo.custo_anel = parseFloat(opt.dataset.custoAnel) || 0;
+    st.wireo.markup    = parseFloat(opt.dataset.markup) || 2.0;
+  } else {
+    st.wireo.custo_anel = 0;
+  }
+  st.wireo.aneis_produto = parseFloat(document.getElementById('wireo_aneis_prod')?.value) || 16;
+  recalcular();
+}
+
+// ── Carrinho multi-item ───────────────────────────────────────────────────────
+const CARRINHO_KEY = 'calc_carrinho_v1';
+
+function carregarCarrinho() {
+  try { return JSON.parse(localStorage.getItem(CARRINHO_KEY) || '[]'); } catch(e) { return []; }
+}
+
+function salvarCarrinhoLS(itens) {
+  localStorage.setItem(CARRINHO_KEY, JSON.stringify(itens));
+}
+
+function atualizarBarraCarrinho() {
+  const itens = carregarCarrinho();
+  const bar = document.getElementById('carrinho_bar');
+  if (!bar) return;
+  if (itens.length === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  const total = itens.reduce((s, i) => s + (i.preco_venda || 0), 0);
+  document.getElementById('carrinho_resumo_txt').textContent =
+    `${itens.length} item${itens.length !== 1 ? 's' : ''} · Total: R$ ${total.toFixed(2)}`;
+  // Padding no layout para não sobrepor conteúdo
+  document.querySelector('.calc-layout').style.paddingBottom = '70px';
+  lucide.createIcons();
+}
+
+function adicionarAoCarrinho() {
+  if (!st.qtd || st.custoTotal <= 0) {
+    alert('Calcule completamente antes de adicionar ao carrinho.'); return;
+  }
+  const itens = carregarCarrinho();
+  const dados = coletarDados();
+  dados._id = Date.now();
+  dados.preco_unit = st.qtd > 0 ? parseFloat((st.precoVenda / st.qtd).toFixed(4)) : 0;
+  itens.push(dados);
+  salvarCarrinhoLS(itens);
+  atualizarBarraCarrinho();
+  // Feedback visual no botão
+  const btn = document.querySelector('.acao-btn[onclick="adicionarAoCarrinho()"]');
+  if (btn) {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i data-lucide="check" style="color:var(--sucesso)"></i><div><div class="acao-btn-titulo" style="color:var(--sucesso);">Adicionado! ✓</div><div class="acao-btn-sub">Pode calcular o próximo item</div></div>';
+    btn.style.borderColor = 'var(--sucesso)';
+    lucide.createIcons();
+    setTimeout(() => { btn.innerHTML = orig; lucide.createIcons(); }, 2000);
+  }
+}
+
+function adicionarECalcularProximo() {
+  if (!st.qtd || st.custoTotal <= 0) {
+    alert('Calcule completamente antes de adicionar ao carrinho.'); return;
+  }
+  adicionarAoCarrinho();
+  setTimeout(() => window.location.reload(), 300);
+}
+
+function verCarrinho() {
+  const itens = carregarCarrinho();
+  const lista = document.getElementById('modal-carrinho-lista');
+  const totalEl = document.getElementById('modal-carrinho-total');
+  if (!lista) return;
+  if (itens.length === 0) {
+    lista.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px 0;">Carrinho vazio.</p>';
+    if (totalEl) totalEl.textContent = '';
+    document.getElementById('modal-carrinho').style.display = 'flex';
+    lucide.createIcons(); return;
+  }
+  let total = 0;
+  lista.innerHTML = itens.map((it, idx) => {
+    total += it.preco_venda || 0;
+    const unit = it.quantidade > 0 ? (it.preco_venda / it.quantidade).toFixed(2) : '0,00';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--borda);">
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:.9rem;">${it.nome || 'Produto'}</div>
+        <div style="font-size:.78rem;color:var(--texto-muted);">${it.quantidade} unidades · R$ ${unit}/un · Tipo: ${it.tipo_produto}</div>
+      </div>
+      <div style="font-weight:700;color:var(--primaria);white-space:nowrap;">R$ ${(it.preco_venda||0).toFixed(2)}</div>
+      <button onclick="removerDoCarrinho(${idx})" style="background:none;border:none;cursor:pointer;color:#EF4444;padding:4px;">
+        <i data-lucide="x" style="width:16px;height:16px;"></i>
+      </button>
+    </div>`;
+  }).join('');
+  if (totalEl) totalEl.innerHTML = `Total: <span style="color:var(--primaria);">R$ ${total.toFixed(2)}</span>`;
+  document.getElementById('modal-carrinho').style.display = 'flex';
+  lucide.createIcons();
+}
+
+function removerDoCarrinho(idx) {
+  const itens = carregarCarrinho();
+  itens.splice(idx, 1);
+  salvarCarrinhoLS(itens);
+  atualizarBarraCarrinho();
+  verCarrinho();
+}
+
+function limparCarrinho() {
+  if (!confirm('Limpar todos os itens do carrinho?')) return;
+  localStorage.removeItem(CARRINHO_KEY);
+  atualizarBarraCarrinho();
+}
+
+function gerarOrcamentoCarrinho() {
+  const itens = carregarCarrinho();
+  if (itens.length === 0) { alert('Carrinho vazio.'); return; }
+  sessionStorage.setItem('calc_carrinho_orcamento', JSON.stringify(itens));
+  window.location.href = '/orcamentos/novo?from_calc=1&multi=1';
+}
+
+// Init
+recalcular();
+atualizarBarraCarrinho();
+</script>
+{% endblock %}

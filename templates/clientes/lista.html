@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block titulo %}Clientes{% endblock %}
+{% block topbar_titulo %}Clientes{% endblock %}
+{% block topbar_acoes %}
+  <a href="{{ url_for('novo_cliente') }}" class="btn btn-primario">
+    <i data-lucide="user-plus"></i> Novo Cliente
+  </a>
+{% endblock %}
+
+{% block conteudo %}
+<div class="filtros">
+  <form method="get" class="busca-wrapper">
+    <i data-lucide="search"></i>
+    <input type="text" name="q" class="form-control" placeholder="Buscar por nome, email, telefone ou CPF/CNPJ..." value="{{ busca or '' }}" oninput="this.form.submit()">
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    {% if clientes %}
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Telefone</th>
+          <th>Email</th>
+          <th>CPF / CNPJ</th>
+          <th>Cidade</th>
+          <th>Cadastro</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in clientes %}
+        <tr>
+          <td class="fw-600">{{ c.nome }}</td>
+          <td>{{ c.telefone or '—' }}</td>
+          <td class="text-muted">{{ c.email or '—' }}</td>
+          <td class="text-muted">{{ c.cpf_cnpj or '—' }}</td>
+          <td class="text-muted">{{ c.cidade or '—' }}</td>
+          <td class="text-muted">{{ c.created_at[:10] }}</td>
+          <td>
+            <div class="d-flex gap-8">
+              <a href="{{ url_for('editar_cliente', id=c.id) }}" class="btn btn-ghost btn-sm" title="Editar">
+                <i data-lucide="pencil"></i>
+              </a>
+              <form method="post" action="{{ url_for('excluir_cliente', id=c.id) }}" onsubmit="return confirm('Excluir {{ c.nome }}?')">
+                <button type="submit" class="btn btn-ghost btn-sm" title="Excluir">
+                  <i data-lucide="trash-2"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="vazio">
+      <i data-lucide="users"></i>
+      <p>Nenhum cliente encontrado. <a href="{{ url_for('novo_cliente') }}" style="color:var(--primaria)">Cadastrar o primeiro</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

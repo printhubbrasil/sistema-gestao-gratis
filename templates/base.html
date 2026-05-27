@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block titulo %}{{ empresa_nome }}{% endblock %} — Sistema</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>{{ empresa_nome }}</h1>
+      <p>Sistema de Gestão</p>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('home') }}" class="nav-item {% if request.endpoint == 'home' %}ativo{% endif %}">
+        <i data-lucide="layout-dashboard"></i> Dashboard
+      </a>
+
+      <div class="nav-section">Precificação</div>
+      <a href="{{ url_for('prec_calcular') }}" class="nav-item {% if request.endpoint == 'prec_calcular' %}ativo{% endif %}">
+        <i data-lucide="calculator"></i> Calculadora
+      </a>
+      <a href="{{ url_for('prec_configuracoes') }}" class="nav-item {% if 'prec_config' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="settings-2"></i> Configurações
+      </a>
+      <a href="{{ url_for('pec_index') }}" class="nav-item {% if request.endpoint == 'pec_index' %}ativo{% endif %}">
+        <i data-lucide="scale"></i> Ponto de Equilíbrio
+      </a>
+
+      <div class="nav-section">Operação</div>
+      <a href="{{ url_for('orcamentos') }}" class="nav-item {% if 'orcamento' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="file-plus"></i> Orçamentos
+      </a>
+      <a href="{{ url_for('pedidos') }}" class="nav-item {% if 'pedido' in request.endpoint and 'orcamento' not in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="shopping-bag"></i> Pedidos
+      </a>
+      <a href="{{ url_for('clientes') }}" class="nav-item {% if 'cliente' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="users"></i> Clientes
+      </a>
+      <a href="{{ url_for('produtos') }}" class="nav-item {% if 'produto' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="package"></i> Produtos
+      </a>
+      <a href="{{ url_for('producao') }}" class="nav-item {% if request.endpoint == 'producao' %}ativo{% endif %}">
+        <i data-lucide="printer"></i> Produção
+      </a>
+
+      <div class="nav-section">Financeiro</div>
+      <a href="{{ url_for('financeiro') }}" class="nav-item {% if request.endpoint == 'financeiro' %}ativo{% endif %}">
+        <i data-lucide="bar-chart-2"></i> Resumo
+      </a>
+      <a href="{{ url_for('caixa') }}" class="nav-item {% if 'caixa' in request.endpoint or 'lancamento' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="wallet"></i> Caixa
+      </a>
+      <a href="{{ url_for('custos') }}" class="nav-item {% if request.endpoint == 'custos' or 'despesa' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="trending-down"></i> Central de Custos
+      </a>
+      <a href="{{ url_for('contas_pagar') }}" class="nav-item {% if 'conta' in request.endpoint and 'fornecedor' not in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="file-check-2"></i> Contas a Pagar
+      </a>
+      <a href="{{ url_for('fornecedores') }}" class="nav-item {% if 'fornecedor' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="truck"></i> Fornecedores
+      </a>
+      <a href="{{ url_for('notasfiscais') }}" class="nav-item {% if 'nf' in request.endpoint and 'nfe' not in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="file-text"></i> Notas Fiscais
+      </a>
+      <a href="{{ url_for('nfe_importar') }}" class="nav-item {% if 'nfe' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="file-input"></i> Importar NF-e
+      </a>
+
+      {% if session.get('nivel') == 'admin' %}
+      <div class="nav-section">Admin</div>
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-item {% if 'admin' in request.endpoint %}ativo{% endif %}">
+        <i data-lucide="shield"></i> Usuários
+      </a>
+      {% endif %}
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <span class="topbar-titulo">{% block topbar_titulo %}{% endblock %}</span>
+      <div class="topbar-acoes">{% block topbar_acoes %}{% endblock %}</div>
+      <div class="topbar-usuario">
+        <span>{{ session.get('usuario_nome', '') }}</span>
+        <form method="POST" action="{{ url_for('logout') }}" style="display:inline;">
+          <button type="submit" class="btn btn-sm btn-outline">Sair</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="conteudo">
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}
+          <div class="alert alert-{{ 'success' if cat == 'success' else 'info' if cat == 'info' else 'danger' }}">
+            {{ msg }}
+          </div>
+        {% endfor %}
+      {% endwith %}
+      {% block conteudo %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<script>
+  lucide.createIcons();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

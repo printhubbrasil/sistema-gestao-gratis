@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% block titulo %}Caixa{% endblock %}
+{% block topbar_titulo %}Caixa{% endblock %}
+
+{% block conteudo %}
+{% if not caixa %}
+<!-- CAIXA FECHADO -->
+<div style="max-width:480px;margin:60px auto;text-align:center;">
+  <div class="card">
+    <div class="card-body" style="padding:40px;">
+      <div style="width:56px;height:56px;background:rgba(233,69,96,.1);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+        <i data-lucide="lock" style="width:24px;height:24px;color:var(--primaria);"></i>
+      </div>
+      <h2 style="font-size:1.1rem;margin-bottom:8px;">Caixa Fechado</h2>
+      <p class="text-muted text-sm mb-24">Abra o caixa para registrar movimentações do dia.</p>
+      <form method="post" action="{{ url_for('abrir_caixa') }}">
+        <div class="form-group">
+          <label>Valor de Abertura (R$)</label>
+          <input type="number" name="valor_abertura" class="form-control" min="0" step="0.01" placeholder="0,00" value="0">
+        </div>
+        <button type="submit" class="btn btn-sucesso w-full btn-lg">
+          <i data-lucide="unlock"></i> Abrir Caixa
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% else %}
+<!-- CAIXA ABERTO -->
+{% set entradas = lancamentos | selectattr('tipo','equalto','entrada') | map(attribute='valor') | sum %}
+{% set saidas = lancamentos | selectattr('tipo','equalto','saida') | map(attribute='valor') | sum %}
+{% set saldo = (caixa.valor_abertura or 0) + entradas - saidas %}
+
+<div class="caixa-resumo mb-24">
+  <div class="card caixa-valor">
+    <p>Abertura</p>
+    <h2>R$ {{ "%.2f"|format(caixa.valor_abertura or 0) }}</h2>
+    <p class="text-sm text-muted mt-16">{{ caixa.data_abertura[:16] }}</p>
+  </div>
+  <div class="card caixa-valor">
+    <p>Entradas</p>
+    <h2 class="entrada">R$ {{ "%.2f"|format(entradas) }}</h2>
+    <p class="text-sm text-muted mt-16">{{ lancamentos | selectattr('tipo','equalto','entrada') | list | length }} lançamentos</p>
+  </div>
+  <div class="card caixa-valor">
+    <p>Saídas</p>
+    <h2 class="saida">R$ {{ "%.2f"|format(saidas) }}</h2>
+    <p class="text-sm text-muted mt-16">{{ lancamentos | selectattr('tipo','equalto','saida') | list | length }} lançamentos</p>
+  </div>
+  <div class="card caixa-valor">
+    <p>Saldo Atual</p>
+    <h2 class="{% if saldo >= 0 %}saldo{% else %}saida{% endif %}">R$ {{ "%.2f"|format(saldo) }}</h2>
+    <span class="badge badge-aberto mt-16">Caixa Aberto</span>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;">
+  <!-- LANÇAMENTOS -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Lançamentos</h3>
+      <span class="text-muted text-sm">{{ lancamentos|length }} registros</span>
+    </div>
+    <div class="table-container">
+      {% if lancamentos %}
+      <table>
+        <thead>
+          <tr>
+            <th>Descrição</th>
+            <th>Categoria</th>
+            <th>Tipo</th>
+            <th class="text-right">Valor</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in lancamentos %}
+          <tr>
+            <td>{{ l.descricao }}</td>
+            <td class="text-muted">{{ l.categoria or '—' }}</td>
+            <td>
+              {% if l.tipo == 'entrada' %}
+              <span class="badge badge-pronto">Entrada</span>
+              {% else %}
+              <span class="badge badge-cancelado">Saída</span>
+              {% endif %}
+            </td>
+            <td class="text-right fw-600 {% if l.tipo == 'entrada' %}text-sucesso{% else %}text-perigo{% endif %}">
+              {% if l.tipo == 'saida' %}-{% endif %}R$ {{ "%.2f"|format(l.valor) }}
+            </td>
+            <td>
+              <form method="post" action="{{ url_for('excluir_lancamento', id=l.id) }}" onsubmit="return confirm('Excluir lançamento?')">
+                <button type="submit" class="btn btn-ghost btn-sm"><i data-lucide="trash-2"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="vazio">
+        <i data-lucide="inbox"></i>
+        <p>Nenhum lançamento neste caixa.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- NOVO LANÇAMENTO + FECHAR -->
+  <div>
+    <div class="card mb-16">
+      <div class="card-header"><h3>Novo Lançamento</h3></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('novo_lancamento') }}">
+          <input type="hidden" name="caixa_id" value="{{ caixa.id }}">
+          <div class="form-group">
+            <label>Tipo</label>
+            <select name="tipo" class="form-control" id="tipo-select">
+              <option value="entrada">Entrada</option>
+              <option value="saida">Saída</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Categoria</label>
+            <select name="categoria" class="form-control" id="cat-select">
+              <option value="">— Selecione —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Descrição *</label>
+            <input type="text" name="descricao" class="form-control" required placeholder="Ex: Pagamento pedido #12">
+          </div>
+          <div class="form-group">
+            <label>Valor (R$) *</label>
+            <input type="number" name="valor" class="form-control" min="0.01" step="0.01" required placeholder="0,00">
+          </div>
+          <button type="submit" class="btn btn-sucesso w-full">
+            <i data-lucide="plus"></i> Registrar
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Fechar Caixa</h3></div>
+      <div class="card-body">
+        <p class="text-muted text-sm mb-16">Saldo final calculado automaticamente.</p>
+        <form method="post" action="{{ url_for('fechar_caixa') }}" onsubmit="return confirm('Fechar o caixa agora?')">
+          <input type="hidden" name="caixa_id" value="{{ caixa.id }}">
+          <button type="submit" class="btn btn-perigo w-full">
+            <i data-lucide="lock"></i> Fechar Caixa
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const cats = {
+  entrada: ['Venda Balcão','Pagamento Pedido','PIX Recebido','Cartão','Outro'],
+  saida: ['Fornecedor','Material','Aluguel','Energia','Funcionário','Imposto','Outro']
+};
+
+function atualizarCats() {
+  const tipo = document.getElementById('tipo-select').value;
+  const sel = document.getElementById('cat-select');
+  sel.innerHTML = '<option value="">— Selecione —</option>';
+  (cats[tipo] || []).forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+}
+
+const tipoSel = document.getElementById('tipo-select');
+if (tipoSel) {
+  tipoSel.addEventListener('change', atualizarCats);
+  atualizarCats();
+}
+</script>
+{% endblock %}
