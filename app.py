@@ -1134,7 +1134,7 @@ def excluir_nf(id):
 
 if __name__ == '__main__':
     db.init_db()
-    debug_mode = os.environ.get('IMPRESSA_DEBUG', 'true').lower() == 'true'
+    debug_mode = os.environ.get('DEBUG', 'true').lower() == 'true'
     print("\nSistema rodando em: http://localhost:5001")
     print("Pressione Ctrl+C para parar\n")
     app.run(debug=debug_mode, port=5001)
