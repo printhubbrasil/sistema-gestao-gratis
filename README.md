@@ -166,6 +166,7 @@ WorkingDirectory=/var/www/sistema-grafica
 Environment=SCRIPT_NAME=/gestao
 Environment=SECRET_KEY=sua-chave-secreta
 Environment=DATABASE_PATH=grafica.db
+Environment=BEHIND_PROXY=1
 Environment="EMPRESA_NOME=Minha Gráfica"
 Environment="EMPRESA_CIDADE=Cidade — UF"
 Environment="EMPRESA_TELEFONE=(00) 00000-0000"

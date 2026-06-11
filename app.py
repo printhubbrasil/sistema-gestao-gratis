@@ -64,6 +64,22 @@ _login_tentativas: dict = {}
 _MAX_TENTATIVAS = 5
 _BLOQUEIO_SEGUNDOS = 900  # 15 minutos
 
+# Atrás de um proxy (nginx/gunicorn) o IP do visitante chega só no header
+# X-Forwarded-For — sem isto, request.remote_addr é sempre 127.0.0.1 e o
+# limite por IP vira um contador global. Ative com BEHIND_PROXY=1 SOMENTE quando
+# houver um proxy de confiança na frente; em acesso direto deixe desligado, senão
+# qualquer um falsifica o header e burla o bloqueio.
+_BEHIND_PROXY = os.environ.get('BEHIND_PROXY', '').lower() in ('1', 'true', 'yes')
+
+def _client_ip() -> str:
+    """IP real do visitante, respeitando o proxy só quando configurado."""
+    if _BEHIND_PROXY:
+        encaminhado = request.headers.get('X-Forwarded-For', '')
+        if encaminhado:
+            # primeiro IP da lista = cliente original (o proxy anexa os seguintes)
+            return encaminhado.split(',')[0].strip()
+    return request.remote_addr or 'desconhecido'
+
 def _checar_rate_limit(ip: str) -> bool:
     """Retorna True se o IP está bloqueado."""
     if ip not in _login_tentativas:
@@ -109,7 +125,7 @@ def login():
     if 'usuario_id' in session:
         return redirect(url_for('home'))
     if request.method == 'POST':
-        ip = request.remote_addr
+        ip = _client_ip()
         if _checar_rate_limit(ip):
             flash('Muitas tentativas. Tente novamente em 15 minutos.', 'danger')
             return render_template('login.html')
