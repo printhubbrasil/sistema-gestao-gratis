@@ -11,9 +11,11 @@ Desenvolvido com Python + Flask + SQLite. Roda localmente no navegador, sem depe
 - **Precificação** — calculadora de custo para papel/toner, flexíveis (m²), acrílico UV, encadernados e apostilas
 - **Orçamentos** — geração com PDF imprimível e envio por WhatsApp
 - **Pedidos** — controle de fila de produção
-- **Clientes** — cadastro com histórico
-- **Produtos e Estoque** — catálogo de produtos e controle de insumos
-- **Financeiro** — contas a pagar e ponto de equilíbrio
+- **Clientes** — cadastro com histórico, cadastro rápido em qualquer tela e autopreenchimento por CNPJ (BrasilAPI, gratuita)
+- **Produtos e Estoque** — catálogo com foto, preço por faixa de quantidade e controle de insumos
+- **Importação de NF-e** — suba o XML da nota do fornecedor e atualize custo e estoque dos insumos automaticamente
+- **Financeiro** — caixa, despesas, contas a pagar e ponto de equilíbrio
+- **Personalização** — nome, cidade, telefone, site e logo da empresa configuráveis pelo painel (logo sai nos PDFs)
 - **Usuários** — múltiplos usuários com níveis de acesso (admin / operador)
 - **Backup** — download do banco de dados direto pelo painel
 
@@ -31,8 +33,8 @@ Desenvolvido com Python + Flask + SQLite. Roda localmente no navegador, sem depe
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/sistema-grafica.git
-cd sistema-grafica
+git clone https://github.com/printhubbrasil/sistema-gestao-gratis.git
+cd sistema-gestao-gratis
 ```
 
 ### 2. Crie um ambiente virtual
@@ -91,6 +93,8 @@ Login padrão criado automaticamente:
 
 **Troque a senha imediatamente** em: Admin → Gerenciar Usuários → Editar.
 
+Depois, configure a identidade da empresa (nome, cidade, telefone, site e logo) em: **Admin → Personalização** — sem precisar editar código nem reiniciar.
+
 ---
 
 ## Estrutura do projeto
@@ -102,16 +106,22 @@ sistema-grafica/
 ├── requirements.txt    # Dependências Python
 ├── .env.example        # Modelo de configuração
 ├── static/
-│   └── css/            # Estilos
+│   ├── css/            # Estilos
+│   └── uploads/        # Logo da empresa e fotos de produtos
 └── templates/          # Páginas HTML (Jinja2)
     ├── base.html
     ├── login.html
+    ├── personalizacao.html
+    ├── _modal_cliente.html
     ├── clientes/
     ├── pedidos/
     ├── orcamentos/
     ├── precificacao/
     ├── produtos/
     ├── financeiro/
+    ├── custos/
+    ├── nfe/
+    ├── notasfiscais/
     ├── producao/
     └── admin/
 ```

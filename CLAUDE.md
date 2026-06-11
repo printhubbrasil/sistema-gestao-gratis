@@ -13,9 +13,11 @@ Sistema web completo para gestão de gráficas e impressoras digitais, desenvolv
 - Calcula custo e preço de venda de qualquer produto gráfico (papel, flexíveis, acrílico, encadernados, apostilas)
 - Gera orçamentos com PDF imprimível e link de WhatsApp
 - Controla pedidos e fila de produção
-- Cadastra clientes com histórico completo
-- Gerencia produtos, estoque de insumos e fornecedores
-- Controla financeiro: caixa, contas a pagar, ponto de equilíbrio
+- Cadastra clientes com histórico completo, cadastro rápido em modal e autopreenchimento por CNPJ (BrasilAPI)
+- Gerencia produtos (com foto e preço por faixa de quantidade), estoque de insumos e fornecedores
+- Importa XML de NF-e de fornecedor para atualizar custo e estoque dos insumos
+- Controla financeiro: caixa, despesas, contas a pagar, ponto de equilíbrio
+- Personalização pelo painel: nome, cidade, telefone, site e logo da empresa (logo sai nos PDFs)
 - Suporta múltiplos usuários com níveis de acesso (admin / operador)
 - Faz backup do banco de dados direto pelo painel
 
@@ -149,6 +151,8 @@ Abra o navegador em: **http://localhost:5001**
 
 A tela de login deve aparecer com o nome da empresa que foi configurado.
 
+> **Windows:** alternativamente, dê dois cliques no `iniciar.bat` na pasta do projeto — ele instala o Flask se faltar e inicia o sistema.
+
 ---
 
 ### ETAPA 8 — Confirmar que funcionou
@@ -166,10 +170,11 @@ Se qualquer item falhar, leia o erro no terminal e resolva antes de continuar. O
 
 Após confirmar que o sistema está funcionando, explique brevemente os próximos passos para o usuário começar a usar:
 
-1. **Configurar máquinas e papéis** → Precificação → Configurações
-2. **Cadastrar primeiros clientes** → Clientes → Novo Cliente
-3. **Testar um orçamento** → Orçamentos → Novo Orçamento
-4. **Trocar a senha** → Admin → Gerenciar Usuários → Editar (recomendado fazer agora)
+1. **Personalizar a empresa** → Admin → Personalização (nome, cidade, telefone, site e logo — o logo aparece nos PDFs)
+2. **Configurar máquinas e papéis** → Precificação → Configurações
+3. **Cadastrar primeiros clientes** → Clientes → Novo Cliente
+4. **Testar um orçamento** → Orçamentos → Novo Orçamento
+5. **Trocar a senha** → Admin → Gerenciar Usuários → Editar (recomendado fazer agora)
 
 ---
 
@@ -188,13 +193,16 @@ sistema-grafica/
 ├── README.md               # Documentação pública
 │
 ├── static/
-│   └── css/
-│       └── style.css       # Todo o CSS do sistema
+│   ├── css/
+│   │   └── style.css       # Todo o CSS do sistema
+│   └── uploads/            # Logo da empresa e fotos de produtos (criada em runtime)
 │
 └── templates/
     ├── base.html           # Layout base (navbar, sidebar, estrutura)
     ├── login.html          # Tela de login
     ├── home.html           # Dashboard principal
+    ├── personalizacao.html # Nome, dados e logo da empresa
+    ├── _modal_cliente.html # Modal de cadastro rápido de cliente (reutilizável)
     │
     ├── clientes/
     │   ├── lista.html
@@ -229,6 +237,16 @@ sistema-grafica/
     │   ├── fornecedores.html
     │   └── form_fornecedor.html
     │
+    ├── custos/
+    │   ├── index.html      # Despesas variáveis
+    │   └── contas.html     # Contas a pagar
+    │
+    ├── nfe/
+    │   └── importar.html   # Importação de XML de NF-e
+    │
+    ├── notasfiscais/
+    │   └── emissao.html    # Notas emitidas para clientes
+    │
     ├── producao/
     │   └── fila.html
     │
@@ -255,6 +273,11 @@ sistema-grafica/
 | `/precificacao/ponto-equilibrio` | `ponto_equilibrio()` | Análise de custos fixos |
 | `/produtos` | `produtos()` | Catálogo de produtos |
 | `/financeiro` | `financeiro()` | Resumo financeiro |
+| `/custos` | `custos()` | Despesas variáveis |
+| `/custos/contas` | `contas_pagar()` | Contas a pagar |
+| `/nfe/importar` | `nfe_importar()` | Importar XML de NF-e |
+| `/notasfiscais` | `notasfiscais()` | Notas emitidas p/ clientes |
+| `/personalizacao` | `personalizacao()` | Nome, dados e logo da empresa |
 | `/admin/usuarios` | `admin_usuarios()` | Gerenciar usuários |
 | `/admin/backup/download` | `admin_backup_download()` | Baixar backup do banco |
 | `/login` | `login()` | Tela de login |
@@ -269,11 +292,13 @@ Edite as variáveis no topo de `static/css/style.css`:
 ```css
 :root {
   --primaria: #E94560;      /* cor principal (botões, destaques) */
-  --secundaria: #3B82F6;    /* cor secundária */
+  --secundaria: #F5A623;    /* cor secundária (laranja) */
   --sucesso: #10B981;       /* verde */
-  --fundo: #0F172A;         /* fundo da página */
-  --card-bg: #1E293B;       /* fundo dos cards */
-  --texto: #F1F5F9;         /* texto principal */
+  --aviso: #F59E0B;         /* amarelo de alerta */
+  --perigo: #EF4444;        /* vermelho de erro */
+  --fundo: #F1F5F9;         /* fundo da página */
+  --card-bg: #FFFFFF;       /* fundo dos cards */
+  --sidebar-bg: #16213E;    /* fundo da barra lateral */
 }
 ```
 
@@ -290,7 +315,7 @@ Edite as variáveis no topo de `static/css/style.css`:
 4. Adicione o link no menu em `templates/base.html`
 
 ### Alterar o nome da empresa sem editar código
-Edite o arquivo `.env` e reinicie o servidor — o nome atualiza em todo o sistema automaticamente.
+Vá em **Admin → Personalização** no próprio painel: nome, cidade, telefone, site e logo, sem reiniciar nada. O que for salvo ali tem prioridade sobre o `.env` (que segue valendo como padrão inicial).
 
 ### Criar novo usuário
 Admin → Gerenciar Usuários → Novo Usuário. Escolha o nível:
@@ -329,7 +354,7 @@ Renomeie o arquivo baixado para `grafica.db` e substitua o arquivo na pasta do s
 
 **Segurança do login:**
 - O sistema bloqueia o IP após 5 tentativas erradas de login por 15 minutos
-- As senhas são armazenadas com hash bcrypt (nunca em texto puro)
+- As senhas são armazenadas com hash pbkdf2:sha256 (nunca em texto puro)
 - A sessão expira em 8 horas de inatividade
 
 ---
