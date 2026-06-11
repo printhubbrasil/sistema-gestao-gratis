@@ -1,0 +1,141 @@
+{# Modal de cadastro rápido de cliente (reutilizável).
+   Uso: botão com onclick="abrirModalCliente('id-do-select')" + incluir este partial FORA do <form>. #}
+<div id="modal-cliente" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3>Cadastrar novo cliente</h3>
+      <button type="button" class="modal-fechar" onclick="fecharModalCliente()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nome *</label>
+        <input type="text" id="mc-nome" class="form-control" placeholder="Nome completo ou razão social">
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label>Telefone / WhatsApp</label>
+          <input type="text" id="mc-telefone" class="form-control" placeholder="(11) 99999-9999">
+        </div>
+        <div class="form-group">
+          <label>CPF / CNPJ</label>
+          <input type="text" id="mc-doc" class="form-control" placeholder="000.000.000-00">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Email</label>
+        <input type="email" id="mc-email" class="form-control" placeholder="email@exemplo.com">
+      </div>
+      <p id="mc-erro" style="color:#dc2626;font-size:.82rem;margin-top:10px;display:none;"></p>
+      <p class="text-muted" style="font-size:.78rem;margin-top:10px;">
+        Cadastro rápido — você pode completar endereço e demais dados depois em Clientes.
+      </p>
+    </div>
+    <div class="modal-footer" style="padding:16px 24px;border-top:1px solid var(--borda);display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn btn-secundario" onclick="fecharModalCliente()">Cancelar</button>
+      <button type="button" class="btn btn-primario" id="mc-salvar" onclick="salvarClienteRapido()">
+        <i data-lucide="user-plus"></i> Cadastrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _mcTargetSelect = null;
+
+function abrirModalCliente(selectId) {
+  _mcTargetSelect = document.getElementById(selectId);
+  ['mc-nome', 'mc-telefone', 'mc-doc', 'mc-email'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('mc-erro').style.display = 'none';
+  const m = document.getElementById('modal-cliente');
+  m.style.display = 'flex';
+  m.classList.add('aberto');
+  document.getElementById('mc-nome').focus();
+}
+
+function fecharModalCliente() {
+  const m = document.getElementById('modal-cliente');
+  m.classList.remove('aberto');
+  m.style.display = 'none';
+}
+
+function salvarClienteRapido() {
+  const nome = document.getElementById('mc-nome').value.trim();
+  const erroEl = document.getElementById('mc-erro');
+  if (!nome) {
+    erroEl.textContent = 'O nome é obrigatório.';
+    erroEl.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('mc-salvar');
+  btn.disabled = true;
+  fetch('{{ url_for("api_criar_cliente") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      nome: nome,
+      telefone: document.getElementById('mc-telefone').value.trim(),
+      cpf_cnpj: document.getElementById('mc-doc').value.trim(),
+      email: document.getElementById('mc-email').value.trim()
+    })
+  })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      if (!data.ok) {
+        erroEl.textContent = data.erro || 'Erro ao cadastrar o cliente.';
+        erroEl.style.display = 'block';
+        return;
+      }
+      if (_mcTargetSelect) {
+        const opt = document.createElement('option');
+        opt.value = data.id;
+        opt.textContent = data.nome;
+        opt.dataset.nome = data.nome;
+        opt.dataset.doc = data.cpf_cnpj || '';
+        _mcTargetSelect.appendChild(opt);
+        _mcTargetSelect.value = data.id;
+        _mcTargetSelect.dispatchEvent(new Event('change'));
+      }
+      fecharModalCliente();
+    })
+    .catch(() => {
+      btn.disabled = false;
+      erroEl.textContent = 'Falha de conexão. Tente novamente.';
+      erroEl.style.display = 'block';
+    });
+}
+
+// Autopreenchimento por CNPJ (BrasilAPI). CPF não tem consulta pública (LGPD).
+document.getElementById('mc-doc').addEventListener('blur', function () {
+  const doc = this.value.replace(/\D/g, '');
+  if (doc.length !== 14) return;
+  const erroEl = document.getElementById('mc-erro');
+  const btn = document.getElementById('mc-salvar');
+  const labelOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'Consultando CNPJ...';
+  fetch('{{ url_for("api_consulta_documento") }}?doc=' + doc)
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.innerHTML = labelOriginal;
+      lucide.createIcons();
+      if (!data.ok) { erroEl.textContent = data.erro; erroEl.style.display = 'block'; return; }
+      erroEl.style.display = 'none';
+      const nomeEl = document.getElementById('mc-nome');
+      if (!nomeEl.value.trim()) nomeEl.value = data.nome || '';
+      if (data.telefone) document.getElementById('mc-telefone').value = data.telefone;
+      if (data.email) document.getElementById('mc-email').value = data.email;
+    })
+    .catch(() => {
+      btn.disabled = false;
+      btn.innerHTML = labelOriginal;
+      lucide.createIcons();
+    });
+});
+
+// Fecha ao clicar fora do modal
+document.getElementById('modal-cliente').addEventListener('click', function (e) {
+  if (e.target === this) fecharModalCliente();
+});
+</script>

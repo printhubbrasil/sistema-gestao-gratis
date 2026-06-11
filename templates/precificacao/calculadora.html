@@ -1225,7 +1225,7 @@
   <div class="modal" style="max-width:560px;">
     <div class="modal-header">
       <h3>Salvar como Produto</h3>
-      <button type="button" class="modal-fechar" onclick="document.getElementById('modal-salvar-produto').style.display='none'">&times;</button>
+      <button type="button" class="modal-fechar" onclick="fecharModalEl('modal-salvar-produto')">&times;</button>
     </div>
     <div class="modal-body" style="padding:20px;">
       <div class="form-grid form-grid-2 mb-16">
@@ -1249,7 +1249,7 @@
       <p class="text-muted" style="font-size:.8rem;margin-top:10px;">O produto será salvo no catálogo com estas faixas. Você pode editar depois em Produtos.</p>
     </div>
     <div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--borda);display:flex;gap:10px;justify-content:flex-end;">
-      <button type="button" class="btn btn-secundario" onclick="document.getElementById('modal-salvar-produto').style.display='none'">Cancelar</button>
+      <button type="button" class="btn btn-secundario" onclick="fecharModalEl('modal-salvar-produto')">Cancelar</button>
       <button type="button" class="btn btn-primario" onclick="confirmarSalvarProduto()"><i data-lucide="save"></i> Salvar no Catálogo</button>
     </div>
   </div>
@@ -1281,7 +1281,7 @@
   <div class="modal" style="max-width:680px;">
     <div class="modal-header">
       <h3>🛒 Carrinho de Orçamento</h3>
-      <button type="button" class="modal-fechar" onclick="document.getElementById('modal-carrinho').style.display='none'">&times;</button>
+      <button type="button" class="modal-fechar" onclick="fecharModalEl('modal-carrinho')">&times;</button>
     </div>
     <div class="modal-body" style="padding:20px;">
       <div id="modal-carrinho-lista"></div>
@@ -1289,7 +1289,7 @@
     <div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--borda);display:flex;gap:10px;justify-content:space-between;align-items:center;">
       <div id="modal-carrinho-total" style="font-weight:700;font-size:1rem;"></div>
       <div style="display:flex;gap:10px;">
-        <button class="btn btn-secundario" onclick="document.getElementById('modal-carrinho').style.display='none'">Fechar</button>
+        <button class="btn btn-secundario" onclick="fecharModalEl('modal-carrinho')">Fechar</button>
         <button class="btn btn-primario" onclick="gerarOrcamentoCarrinho()"><i data-lucide="file-plus"></i> Gerar Orçamento</button>
       </div>
     </div>
@@ -1414,11 +1414,12 @@ function validarPasso(from) {
       if (!st.papel) erros.push('Selecione o papel.');
       if (!st.formato) erros.push('Selecione o formato.');
     }
-    if (st.tipo === 'm2' && !st.maquina) erros.push('Selecione a máquina UV/Eco.');
   }
   if (from === 3) {
     if ((st.tipo === 'papel' || st.tipo === 'apostila') && !st.maquina)
       erros.push('Selecione a impressora.');
+    if (st.tipo === 'm2' && !st.maquina)
+      erros.push('Selecione a máquina UV/Eco.');
   }
   return erros;
 }
@@ -2589,7 +2590,7 @@ function coletarDados() {
 }
 
 function salvarHistorico() {
-  fetch('/precificacao/salvar', {
+  fetch('{{ url_for("prec_salvar") }}', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify(coletarDados())
@@ -2601,7 +2602,7 @@ function salvarHistorico() {
 function salvarOrcamento() {
   const dados = coletarDados();
   sessionStorage.setItem('calc_para_orcamento', JSON.stringify(dados));
-  window.location.href = '/orcamentos/novo?from_calc=1';
+  window.location.href = '{{ url_for("novo_orcamento") }}?from_calc=1';
 }
 
 function salvarProduto() {
@@ -2625,7 +2626,7 @@ function salvarProduto() {
   });
   html += '</tbody></table>';
   document.getElementById('modal-prod-faixas-preview').innerHTML = html;
-  document.getElementById('modal-salvar-produto').style.display = 'flex';
+  abrirModalEl('modal-salvar-produto');
   lucide.createIcons();
 }
 
@@ -2641,20 +2642,20 @@ function confirmarSalvarProduto() {
     const r = simularCalculo(q);
     return { qtd: q, preco: parseFloat((r.venda / q).toFixed(4)), custo: parseFloat((r.custo / q).toFixed(4)) };
   });
-  fetch('/precificacao/salvar_produto', {
+  fetch('{{ url_for("prec_salvar_produto") }}', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ ...coletarDados(), nome, unidade, faixas })
   }).then(r => r.json()).then(d => {
     if (d.ok) {
-      document.getElementById('modal-salvar-produto').style.display = 'none';
+      fecharModalEl('modal-salvar-produto');
       alert(`✓ Produto "${nome}" salvo no catálogo!\n\nAcesse Produtos para visualizar e editar.`);
     }
   }).catch(() => alert('Erro ao salvar produto. Tente novamente.'));
 }
 
 function imprimirFicha() {
-  window.open('/precificacao/ficha?' + new URLSearchParams({dados: JSON.stringify(coletarDados())}), '_blank');
+  window.open('{{ url_for("prec_ficha") }}?' + new URLSearchParams({dados: JSON.stringify(coletarDados())}), '_blank');
 }
 
 function copiarWhatsApp() {
@@ -3009,7 +3010,7 @@ function renderLivroComponentes() {
           <button type="button" class="btn btn-ghost btn-sm" onclick="removeComponente(${idx})"><i data-lucide="x"></i></button>
         </div>
         ${PAPELAO_DATA.length === 0 ? `
-          <p class="text-muted text-sm">Nenhum papelão cadastrado. <a href="/precificacao/configuracoes#papelao">Cadastrar agora</a></p>
+          <p class="text-muted text-sm">Nenhum papelão cadastrado. <a href="{{ url_for('prec_configuracoes') }}#papelao">Cadastrar agora</a></p>
         ` : `
         <div class="form-grid form-grid-3" style="margin-bottom:10px;">
           <div class="form-group">
@@ -3109,7 +3110,7 @@ function renderLivroComponentes() {
         </label>
         ${comp.temLaminacao ? `
         <div style="margin-top:8px;padding:10px;background:rgba(59,130,246,.06);border-radius:6px;border:1px solid rgba(59,130,246,.2);">
-          ${BOBINAS_DATA.length === 0 ? `<p style="font-size:.8rem;color:var(--texto-muted);margin:0;">Nenhuma bobina cadastrada. <a href="/precificacao/configuracoes#acabamentos">Cadastrar</a></p>` : `
+          ${BOBINAS_DATA.length === 0 ? `<p style="font-size:.8rem;color:var(--texto-muted);margin:0;">Nenhuma bobina cadastrada. <a href="{{ url_for('prec_configuracoes') }}#acabamentos">Cadastrar</a></p>` : `
           <div class="form-group" style="margin:0 0 8px 0;">
             <label style="font-size:.78rem;">Bobina de Laminação</label>
             <select class="form-control" onchange="onCompLaminacaoSelect(${idx}, this)">
@@ -3350,6 +3351,21 @@ function recalcularWireo() {
 }
 
 // ── Carrinho multi-item ───────────────────────────────────────────────────────
+// Abre/fecha modais .modal-overlay corretamente: o CSS deixa opacity:0 e
+// pointer-events:none até a classe .aberto entrar — só mudar display não basta.
+function abrirModalEl(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.style.display = 'flex';
+  m.classList.add('aberto');
+}
+function fecharModalEl(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.classList.remove('aberto');
+  m.style.display = 'none';
+}
+
 const CARRINHO_KEY = 'calc_carrinho_v1';
 
 function carregarCarrinho() {
@@ -3412,7 +3428,7 @@ function verCarrinho() {
   if (itens.length === 0) {
     lista.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px 0;">Carrinho vazio.</p>';
     if (totalEl) totalEl.textContent = '';
-    document.getElementById('modal-carrinho').style.display = 'flex';
+    abrirModalEl('modal-carrinho');
     lucide.createIcons(); return;
   }
   let total = 0;
@@ -3431,7 +3447,7 @@ function verCarrinho() {
     </div>`;
   }).join('');
   if (totalEl) totalEl.innerHTML = `Total: <span style="color:var(--primaria);">R$ ${total.toFixed(2)}</span>`;
-  document.getElementById('modal-carrinho').style.display = 'flex';
+  abrirModalEl('modal-carrinho');
   lucide.createIcons();
 }
 
@@ -3453,8 +3469,41 @@ function gerarOrcamentoCarrinho() {
   const itens = carregarCarrinho();
   if (itens.length === 0) { alert('Carrinho vazio.'); return; }
   sessionStorage.setItem('calc_carrinho_orcamento', JSON.stringify(itens));
-  window.location.href = '/orcamentos/novo?from_calc=1&multi=1';
+  window.location.href = '{{ url_for("novo_orcamento") }}?from_calc=1&multi=1';
 }
+
+// ─── RETORNO PARA PEDIDO/ORÇAMENTO (veio de um doc em andamento) ──────────
+(function montarBarraRetorno() {
+  let ctx;
+  try { ctx = JSON.parse(sessionStorage.getItem('calc_retorno') || 'null'); } catch (e) { ctx = null; }
+  if (!ctx || !ctx.url) return;
+
+  const label = ctx.tipo === 'pedido' ? 'pedido' : 'orçamento';
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:sticky;top:0;z-index:200;background:#EEF2FF;border-bottom:1px solid #C7D2FE;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;';
+  bar.innerHTML = `
+    <span style="font-size:.88rem;color:#3730A3;">🧮 Calculando um produto para um <strong>${label}</strong> em andamento. Quando terminar, clique em adicionar.</span>
+    <span style="display:flex;gap:8px;">
+      <button type="button" id="btn-add-destino" class="btn btn-primario" style="font-size:.85rem;background:#4F46E5;border-color:#4F46E5;">➕ Adicionar a este ${label}</button>
+      <button type="button" id="btn-cancelar-destino" class="btn btn-secundario" style="font-size:.85rem;">Cancelar</button>
+    </span>`;
+  document.body.insertAdjacentElement('afterbegin', bar);
+
+  document.getElementById('btn-add-destino').addEventListener('click', () => {
+    if (!st.qtd || !(st.precoVenda > 0)) {
+      alert('Calcule o produto primeiro — preencha os passos até aparecer o preço de venda.');
+      return;
+    }
+    sessionStorage.setItem('calc_item_destino', JSON.stringify(coletarDados()));
+    sessionStorage.removeItem('calc_retorno');
+    const sep = ctx.url.includes('?') ? '&' : '?';
+    window.location.href = ctx.url + sep + 'calc_item=1';
+  });
+  document.getElementById('btn-cancelar-destino').addEventListener('click', () => {
+    sessionStorage.removeItem('calc_retorno');
+    window.location.href = ctx.url;
+  });
+})();
 
 // Init
 recalcular();

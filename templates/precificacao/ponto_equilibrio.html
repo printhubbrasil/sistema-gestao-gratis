@@ -320,7 +320,7 @@ function abrirFormNovo() {
 
 function editarCusto(c) {
   document.getElementById('form-titulo').textContent = '✏️ Editar: ' + c.nome;
-  document.getElementById('action-form-custo').action = `/precificacao/custo-fixo/${c.id}/editar`;
+  document.getElementById('action-form-custo').action = `{{ url_for("precificacao") }}/custo-fixo/${c.id}/editar`;
   document.getElementById('custo_nome').value  = c.nome;
   document.getElementById('custo_cat').value   = c.categoria;
   document.getElementById('custo_valor').value = c.valor;

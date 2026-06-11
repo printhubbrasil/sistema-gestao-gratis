@@ -2,6 +2,11 @@
 {% block titulo %}{{ 'Editar Pedido #' ~ pedido.id if pedido else 'Novo Pedido' }}{% endblock %}
 {% block topbar_titulo %}{{ 'Editar Pedido #' ~ pedido.id if pedido else 'Novo Pedido' }}{% endblock %}
 {% block topbar_acoes %}
+  {% if pedido %}
+  <a href="{{ url_for('ver_pedido', id=pedido.id) }}" class="btn btn-primario">
+    <i data-lucide="eye"></i> Ver / Imprimir / Enviar
+  </a>
+  {% endif %}
   <a href="{{ url_for('pedidos') }}" class="btn btn-secundario">
     <i data-lucide="arrow-left"></i> Voltar
   </a>
@@ -20,7 +25,12 @@
         <div class="card-body">
           <div class="form-grid form-grid-2">
             <div class="form-group">
-              <label>Cliente</label>
+              <div class="d-flex justify-between align-center">
+                <label>Cliente</label>
+                <button type="button" class="btn btn-secundario btn-sm" style="font-size:.85rem;" onclick="abrirModalCliente('select-cliente')">
+                  <i data-lucide="user-plus"></i> Novo cliente
+                </button>
+              </div>
               <select name="cliente_id" class="form-control" id="select-cliente">
                 <option value="">— Selecione —</option>
                 {% for c in clientes %}
@@ -66,6 +76,15 @@
         <div class="card-header">
           <h3>Itens do Pedido</h3>
         </div>
+        <div style="padding:12px 16px 0;">
+          <div style="position:relative;">
+            <div class="busca-wrapper" style="max-width:100%;">
+              <i data-lucide="search"></i>
+              <input type="text" id="busca-item-produto" class="form-control" placeholder="Buscar produto cadastrado para adicionar...">
+            </div>
+            <div id="sugestoes-produto" style="display:none;position:absolute;z-index:50;left:0;right:0;background:#fff;border:1px solid var(--borda);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:300px;overflow-y:auto;margin-top:4px;"></div>
+          </div>
+        </div>
         <div class="itens-pedido" id="itens-container">
           <div class="item-pedido-row item-header">
             <span>Produto / Descrição</span>
@@ -88,7 +107,10 @@
             {% endif %}
           </div>
           <button type="button" class="add-item-btn" id="btn-add-item">
-            <i data-lucide="plus"></i> Adicionar item
+            <i data-lucide="plus"></i> Adicionar item em branco (texto livre)
+          </button>
+          <button type="button" class="add-item-btn" id="btn-calcular-produto" style="border-color:#6366f1;color:#6366f1;">
+            <i data-lucide="calculator"></i> Calcular um produto na calculadora
           </button>
         </div>
       </div>
@@ -120,25 +142,6 @@
         </div>
       </div>
 
-      <!-- Busca de produtos com modal de preços -->
-      <div class="card mt-16">
-        <div class="card-header"><h3>Catálogo de Produtos</h3></div>
-        <div class="card-body" style="padding:12px;">
-          <div class="busca-wrapper mb-8" style="max-width:100%">
-            <i data-lucide="search"></i>
-            <input type="text" id="busca-produto" class="form-control" placeholder="Buscar produto...">
-          </div>
-          <div id="lista-produtos" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
-            {% for p in produtos %}
-            <div class="produto-item" data-id="{{ p.id }}" data-nome="{{ p.nome }}" data-preco="{{ p.preco }}"
-                 style="padding:8px 10px;border-radius:6px;cursor:pointer;font-size:.82rem;border:1px solid var(--borda);">
-              <div class="fw-600">{{ p.nome }}</div>
-              <div class="text-muted" style="font-size:.78rem">R$ {{ "%.2f"|format(p.preco) }} · {{ p.unidade or 'UN' }}</div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </form>
@@ -157,6 +160,8 @@
     </div>
   </div>
 </div>
+
+{% include '_modal_cliente.html' %}
 {% endblock %}
 
 {% block scripts %}
@@ -203,32 +208,119 @@ document.querySelectorAll('.item-linha').forEach(l => {
 });
 document.getElementById('input-desconto').addEventListener('input', recalcular);
 
-// Busca
-document.getElementById('busca-produto').addEventListener('input', function() {
-  const q = this.value.toLowerCase();
-  document.querySelectorAll('.produto-item').forEach(el => {
-    el.style.display = el.dataset.nome.toLowerCase().includes(q) ? '' : 'none';
-  });
-});
+// ─── BUSCA INTELIGENTE DE PRODUTO (autocomplete na linha de itens) ───────
+const PRODUTOS = {{ produtos|tojson }};
+const UPLOADS_URL = "{{ url_for('static', filename='uploads/') }}";
+const elBuscaItem = document.getElementById('busca-item-produto');
+const elSugestoes = document.getElementById('sugestoes-produto');
 
-// Clique no produto → abre modal com tabela de preços
-document.querySelectorAll('.produto-item').forEach(el => {
-  el.addEventListener('click', () => abrirModalPreco(el.dataset.id, el.dataset.nome));
-  el.addEventListener('mouseenter', () => el.style.background = 'var(--fundo)');
-  el.addEventListener('mouseleave', () => el.style.background = '');
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderSugestoes() {
+  const q = elBuscaItem.value.trim().toLowerCase();
+  if (!q) { elSugestoes.style.display = 'none'; return; }
+  const matches = PRODUTOS.filter(p => (p.nome||'').toLowerCase().includes(q)).slice(0, 8);
+  if (!matches.length) {
+    elSugestoes.innerHTML = '<div style="padding:12px;color:#888;font-size:.82rem;">Nenhum produto cadastrado com esse nome.</div>';
+    elSugestoes.style.display = 'block';
+    return;
+  }
+  elSugestoes.innerHTML = matches.map(p => `
+    <div class="sug-item" data-id="${p.id}" data-nome="${escHtml(p.nome)}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--borda);">
+      ${p.imagem
+        ? `<img src="${UPLOADS_URL}${encodeURIComponent(p.imagem)}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;flex-shrink:0;">`
+        : `<div style="width:38px;height:38px;border-radius:6px;background:#F1F5F9;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i data-lucide="image" style="width:16px;height:16px;color:#CBD5E1;"></i></div>`}
+      <div style="flex:1;min-width:0;">
+        <div class="fw-600" style="font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(p.nome)}</div>
+        <div class="text-muted" style="font-size:.78rem;">R$ ${Number(p.preco||0).toFixed(2)} · ${escHtml(p.unidade||'UN')}</div>
+      </div>
+    </div>`).join('');
+  elSugestoes.style.display = 'block';
+  lucide.createIcons();
+  elSugestoes.querySelectorAll('.sug-item').forEach(it => {
+    it.addEventListener('click', () => {
+      elSugestoes.style.display = 'none';
+      elBuscaItem.value = '';
+      abrirModalPreco(it.dataset.id, it.dataset.nome);
+    });
+    it.addEventListener('mouseenter', () => it.style.background = 'var(--fundo)');
+    it.addEventListener('mouseleave', () => it.style.background = '');
+  });
+}
+
+elBuscaItem.addEventListener('input', renderSugestoes);
+elBuscaItem.addEventListener('focus', renderSugestoes);
+document.addEventListener('click', e => {
+  if (e.target !== elBuscaItem && !elSugestoes.contains(e.target)) elSugestoes.style.display = 'none';
 });
 
 function abrirModalPreco(id, nome) {
   document.getElementById('modal-produto-nome').textContent = nome;
   document.getElementById('modal-corpo').innerHTML = '<p style="padding:20px;text-align:center;color:#888">Carregando...</p>';
-  document.getElementById('modal-preco').style.display = 'flex';
+  const _mp = document.getElementById('modal-preco');
+  _mp.style.display = 'flex';
+  _mp.classList.add('aberto');
   produtoSelecionado = { id, nome };
 
-  fetch(`/produtos/${id}/precos`)
+  fetch(`{{ url_for("produtos") }}/${id}/precos`)
     .then(r => r.json())
     .then(p => {
+      const ehDemanda = p.tipo_preco === 'demanda';
+      const ehMetro = p.tipo_preco === 'metro';
+      produtoSelecionado.faixas = ehDemanda ? (p.precos || []) : [];
+      produtoSelecionado.ehMetro = ehMetro;
+      produtoSelecionado.precoM2 = p.preco || 0;
       let html = '';
-      if (p.precos && p.precos.length > 0) {
+      let qtdInicial = 1, precoInicial = p.preco || 0;
+
+      if (ehMetro) {
+        // Preço por m²: informa largura e altura (cm) → área × preço/m²
+        document.getElementById('modal-corpo').innerHTML = `
+          <div style="background:var(--fundo);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;">
+            Preço: <strong style="color:var(--primaria)">R$ ${Number(p.preco||0).toFixed(2)}/m²</strong>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Largura (cm)</label>
+              <input type="number" id="modal-larg" class="form-control" min="0" step="0.1" placeholder="Ex: 100" oninput="calcularMetro()"></div>
+            <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Altura (cm)</label>
+              <input type="number" id="modal-alt" class="form-control" min="0" step="0.1" placeholder="Ex: 50" oninput="calcularMetro()"></div>
+          </div>
+          <div style="font-size:12px;color:#888;margin:10px 0;">Área: <strong id="modal-area">0,00 m²</strong></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Quantidade (peças)</label>
+              <input type="number" id="modal-qtd" class="form-control" value="1" min="1" step="1"></div>
+            <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Preço por peça (R$)</label>
+              <input type="number" id="modal-preco-unit" class="form-control" value="0" step="0.01" readonly style="background:#F8F9FA;"></div>
+          </div>`;
+        lucide.createIcons();
+        return;
+      }
+
+      if (p.precos && p.precos.length > 0 && ehDemanda) {
+        // Preço por demanda: faixas de quantidade
+        html += `<div style="margin-bottom:16px;">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:8px">Faixas de Quantidade</p>
+          <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <thead><tr style="background:var(--fundo)">
+              <th style="padding:6px 10px;text-align:left;font-weight:600">Faixa</th>
+              <th style="padding:6px 10px;text-align:right;font-weight:600">Preço Unit.</th>
+              <th style="padding:6px 10px"></th>
+            </tr></thead><tbody>`;
+        p.precos.forEach(pc => {
+          const mn = parseFloat(pc.qtd_min) || 1;
+          const mx = pc.qtd_max ? parseFloat(pc.qtd_max) : null;
+          const faixaTxt = mx ? `${mn} a ${mx} un` : `${mn}+ ou mais`;
+          html += `<tr style="border-bottom:1px solid var(--borda)">
+            <td style="padding:8px 10px;font-weight:600">${faixaTxt}</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--primaria)">R$ ${parseFloat(pc.preco_venda).toFixed(2)}</td>
+            <td style="padding:8px 10px"><button type="button" style="padding:4px 12px;background:var(--primaria);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer" onclick="selecionarPrecoPronto(${mn},${pc.preco_venda})">Usar</button></td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        html += '<p style="font-size:11px;color:#888;margin-top:6px">Digite a quantidade abaixo que o preço da faixa é aplicado automaticamente.</p></div>';
+        qtdInicial = parseFloat(p.precos[0].qtd_min) || 1;
+        precoInicial = p.precos[0].preco_venda;
+      } else if (p.precos && p.precos.length > 0 && p.tipo_preco !== 'fixo') {
         html += `<div style="margin-bottom:16px;">
           <p style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:8px">Tabela de Preços</p>
           <table style="width:100%;font-size:13px;border-collapse:collapse;">
@@ -247,15 +339,17 @@ function abrirModalPreco(id, nome) {
           </tr>`;
         });
         html += '</tbody></table></div>';
+        qtdInicial = p.precos[0].quantidade || 1;
+        precoInicial = p.precos[0].preco_venda;
       }
       html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
         <div>
           <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Quantidade</label>
-          <input type="number" id="modal-qtd" class="form-control" value="${p.precos && p.precos[0] ? p.precos[0].quantidade : 1}" min="1" step="1">
+          <input type="number" id="modal-qtd" class="form-control" value="${qtdInicial}" min="1" step="1" ${ehDemanda ? 'oninput="aplicarFaixaDemanda()"' : ''}>
         </div>
         <div>
           <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">Preço Unitário (R$)</label>
-          <input type="number" id="modal-preco-unit" class="form-control" value="${p.precos && p.precos[0] ? p.precos[0].preco_venda : p.preco || 0}" step="0.01" min="0">
+          <input type="number" id="modal-preco-unit" class="form-control" value="${precoInicial}" step="0.01" min="0">
         </div>
       </div>`;
       if (p.variacoes && p.variacoes.length > 0) {
@@ -287,19 +381,52 @@ function selecionarPrecoPronto(qtd, preco) {
   document.getElementById('modal-preco-unit').value = preco;
 }
 
+// Preço por m²: calcula o preço por peça a partir de largura×altura (cm)
+function calcularMetro() {
+  const larg = parseFloat(document.getElementById('modal-larg').value) || 0;
+  const alt = parseFloat(document.getElementById('modal-alt').value) || 0;
+  const area = (larg / 100) * (alt / 100);
+  const areaEl = document.getElementById('modal-area');
+  if (areaEl) areaEl.textContent = area.toFixed(2).replace('.', ',') + ' m²';
+  const unit = area * (produtoSelecionado.precoM2 || 0);
+  document.getElementById('modal-preco-unit').value = unit.toFixed(2);
+}
+
+// Preço por demanda: ao digitar a quantidade, aplica o preço da faixa correspondente
+function aplicarFaixaDemanda() {
+  const faixas = produtoSelecionado && produtoSelecionado.faixas;
+  if (!faixas || !faixas.length) return;
+  const qtd = parseFloat(document.getElementById('modal-qtd').value) || 0;
+  const faixa = faixas.find(f => {
+    const mn = parseFloat(f.qtd_min) || 1;
+    const mx = f.qtd_max ? parseFloat(f.qtd_max) : Infinity;
+    return qtd >= mn && qtd <= mx;
+  });
+  if (faixa) document.getElementById('modal-preco-unit').value = faixa.preco_venda;
+}
+
 document.getElementById('modal-confirmar').addEventListener('click', () => {
   if (!produtoSelecionado) return;
   const qtd = parseFloat(document.getElementById('modal-qtd').value) || 1;
   const preco = parseFloat(document.getElementById('modal-preco-unit').value) || 0;
-  const varSel = document.getElementById('modal-variacao');
-  const varTxt = varSel ? varSel.value : '';
-  const desc = produtoSelecionado.nome + (varTxt ? ' — ' + varTxt : '');
+  let desc = produtoSelecionado.nome;
+  if (produtoSelecionado.ehMetro) {
+    const larg = document.getElementById('modal-larg') ? document.getElementById('modal-larg').value : '';
+    const alt = document.getElementById('modal-alt') ? document.getElementById('modal-alt').value : '';
+    if (larg && alt) desc += ` (${larg}×${alt}cm)`;
+  } else {
+    const varSel = document.getElementById('modal-variacao');
+    const varTxt = varSel ? varSel.value : '';
+    if (varTxt) desc += ' — ' + varTxt;
+  }
   addLinha(desc, qtd, preco, produtoSelecionado.id);
   fecharModal();
 });
 
 function fecharModal() {
-  document.getElementById('modal-preco').style.display = 'none';
+  const _mp = document.getElementById('modal-preco');
+  _mp.classList.remove('aberto');
+  _mp.style.display = 'none';
   produtoSelecionado = null;
 }
 document.getElementById('modal-fechar').addEventListener('click', fecharModal);
@@ -320,6 +447,66 @@ document.getElementById('form-pedido').addEventListener('submit', function() {
   });
   document.getElementById('itens_json').value = JSON.stringify(dados);
 });
+
+// ─── CALCULAR PRODUTO NA CALCULADORA E VOLTAR (sem perder o pedido) ───────
+const DOC_ID = {{ pedido.id if pedido else 'null' }};
+const DRAFT_KEY = 'draft_pedido_' + (DOC_ID || 'novo');
+
+function snapshotCampos() {
+  const o = {};
+  document.querySelectorAll('#form-pedido [name]').forEach(el => {
+    if (el.name !== 'itens_json') o[el.name] = el.value;
+  });
+  return o;
+}
+function restaurarCampos(o) {
+  for (const k in o) {
+    const el = document.querySelector(`#form-pedido [name="${k}"]`);
+    if (el) el.value = o[k];
+  }
+}
+function coletarItensAtuais() {
+  return [...document.querySelectorAll('.item-linha')].map(l => ({
+    descricao: l.querySelector('.item-desc').value,
+    quantidade: l.querySelector('.item-qtd').value,
+    preco_unitario: l.querySelector('.item-preco').value,
+    produto_id: l.querySelector('.item-desc').dataset.produtoId || '',
+  }));
+}
+
+document.getElementById('btn-calcular-produto').addEventListener('click', () => {
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ campos: snapshotCampos(), itens: coletarItensAtuais() }));
+  sessionStorage.setItem('calc_retorno', JSON.stringify({ tipo: 'pedido', url: window.location.pathname }));
+  window.location.href = "{{ url_for('prec_calcular') }}";
+});
+
+(function restaurarContexto() {
+  // 1) restaura o rascunho salvo antes de ir pra calculadora
+  const raw = sessionStorage.getItem(DRAFT_KEY);
+  if (raw) {
+    try {
+      const d = JSON.parse(raw);
+      document.getElementById('itens-lista').innerHTML = '';
+      restaurarCampos(d.campos || {});
+      (d.itens || []).forEach(it => addLinha(it.descricao, parseFloat(it.quantidade) || 1, parseFloat(it.preco_unitario) || 0, it.produto_id || ''));
+    } catch (e) {}
+    sessionStorage.removeItem(DRAFT_KEY);
+  }
+  // 2) adiciona o item que veio calculado da calculadora
+  if (new URLSearchParams(location.search).get('calc_item') === '1') {
+    const rawItem = sessionStorage.getItem('calc_item_destino');
+    if (rawItem) {
+      try {
+        const dados = JSON.parse(rawItem);
+        const qtd = parseFloat(dados.quantidade) || 1;
+        const unit = qtd > 0 && dados.preco_venda > 0 ? parseFloat((dados.preco_venda / qtd).toFixed(2)) : 0;
+        addLinha(dados.nome || 'Produto calculado', qtd, unit);
+      } catch (e) {}
+      sessionStorage.removeItem('calc_item_destino');
+    }
+  }
+  recalcular();
+})();
 
 recalcular();
 </script>

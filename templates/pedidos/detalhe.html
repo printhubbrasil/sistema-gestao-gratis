@@ -2,8 +2,11 @@
 {% block titulo %}Pedido #{{ pedido.id }}{% endblock %}
 {% block topbar_titulo %}Pedido #{{ pedido.id }}{% endblock %}
 {% block topbar_acoes %}
+  <button type="button" onclick="enviarWhatsApp()" class="btn" style="background:#25D366;color:#fff;border:none;">
+    <i data-lucide="send"></i> Enviar pro cliente
+  </button>
   <a href="{{ url_for('imprimir_pedido', id=pedido.id) }}" target="_blank" class="btn btn-secundario">
-    <i data-lucide="printer"></i> Imprimir / PDF
+    <i data-lucide="download"></i> Baixar PDF
   </a>
   <a href="{{ url_for('editar_pedido', id=pedido.id) }}" class="btn btn-secundario">
     <i data-lucide="pencil"></i> Editar
@@ -106,4 +109,23 @@
     </div>
   </div>
 </div>
+
+<script>
+function enviarWhatsApp() {
+  const tel = "{{ pedido.cliente_telefone or '' }}".replace(/\D/g, '');
+  if (!tel) { alert('Este cliente não tem telefone cadastrado. Edite o cliente para adicionar o número.'); return; }
+  const fone = tel.length <= 11 ? '55' + tel : tel;
+  const itens = {{ pedido.itens|tojson }};
+  let msg = "Olá {{ (pedido.cliente_nome or 'cliente')|replace('\"','') }}! 👋\n\n";
+  msg += "Segue o seu pedido #{{ pedido.id }} na {{ empresa_nome }}:\n\n";
+  itens.forEach(i => {
+    const q = Number(i.quantidade) % 1 === 0 ? parseInt(i.quantidade) : i.quantidade;
+    msg += `• ${q}x ${i.descricao || i.produto_nome || 'Item'} — R$ ${Number(i.subtotal||0).toFixed(2)}\n`;
+  });
+  msg += `\nTotal: R$ {{ "%.2f"|format(pedido.total) }}`;
+  {% if pedido.prazo %}msg += `\nPrazo de entrega: {{ pedido.prazo }}`;{% endif %}
+  msg += `\n\nQualquer dúvida, estou à disposição!`;
+  window.open(`https://wa.me/${fone}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+</script>
 {% endblock %}

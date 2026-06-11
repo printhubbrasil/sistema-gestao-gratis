@@ -36,7 +36,7 @@
   padding-bottom:10px; border-bottom:1px solid var(--borda);
 }
 .section-title svg { width:16px; height:16px; color:var(--texto-leve); }
-.tipo-preco-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:24px; }
+.tipo-preco-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
 .tipo-preco-card {
   border:1.5px solid var(--borda); border-radius:8px; padding:14px 12px;
   cursor:pointer; transition:all .15s ease; text-align:center;
@@ -49,7 +49,7 @@
 .preco-table { border:1px solid var(--borda); border-radius:8px; overflow:hidden; margin-bottom:12px; }
 .preco-row {
   display:grid;
-  grid-template-columns:100px 120px 130px 120px 90px 90px 90px 90px 36px;
+  grid-template-columns:110px 140px 100px 100px 100px 100px 36px;
   gap:0;
 }
 .preco-row > * { padding:8px 10px; border-right:1px solid var(--borda); }
@@ -57,6 +57,13 @@
 .preco-header { background:#FAFBFC; font-size:.72rem; font-weight:600; color:var(--texto-leve); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--borda); }
 .preco-row .form-control { border:none; padding:6px 8px; font-size:.82rem; border-radius:0; }
 .preco-row .form-control:focus { box-shadow:inset 0 0 0 2px var(--primaria); }
+.demanda-row { display:grid; grid-template-columns:1fr 1fr 1fr 36px; gap:0; }
+.demanda-row > * { padding:8px 10px; border-right:1px solid var(--borda); }
+.demanda-row > *:last-child { border-right:none; }
+.demanda-row .form-control { border:none; padding:6px 8px; font-size:.82rem; border-radius:0; }
+.demanda-row .form-control:focus { box-shadow:inset 0 0 0 2px var(--primaria); }
+.demanda-hint { font-size:.8rem; color:var(--texto-leve); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+.demanda-hint svg { width:14px; height:14px; flex-shrink:0; }
 .var-row { display:grid; grid-template-columns:160px 1fr 120px 120px 140px 36px; gap:0; }
 .var-row > * { padding:8px 10px; border-right:1px solid var(--borda); }
 .var-row > *:last-child { border-right:none; }
@@ -70,7 +77,7 @@
 .trib-section h4 { font-size:.8rem; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--texto-leve); margin-bottom:12px; }
 </style>
 
-<form method="post" id="form-produto">
+<form method="post" id="form-produto" enctype="multipart/form-data">
   <input type="hidden" name="precos_json" id="precos_json">
   <input type="hidden" name="variacoes_json" id="variacoes_json">
 
@@ -98,14 +105,6 @@
             <div class="form-group">
               <label>Prazo de produção</label>
               <input type="text" name="prazo_producao" class="form-control" value="{{ p.prazo_producao or '' }}" placeholder="Ex.: 2 dias úteis">
-            </div>
-            <div class="form-group">
-              <label>Selo de destaque</label>
-              <select name="selo_destaque" class="form-control">
-                {% for s in ['Nenhum','Novo','Promoção','Destaque','Mais Vendido'] %}
-                <option {% if (p.selo_destaque or 'Nenhum') == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-              </select>
             </div>
             <div class="form-grid form-grid-2">
               <div class="form-group">
@@ -140,22 +139,11 @@
               </div>
             </div>
             <div class="form-group">
-              <label>Onde o produto ficará visível? *</label>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
-                {% set opcoes = [
-                  ('visivel_geral','Geral'),
-                  ('visivel_orcamento','Orçamento à Jato'),
-                  ('visivel_painel','Painel de Controle'),
-                  ('visivel_calculadora','Calculadora Virtual'),
-                  ('visivel_loja','Loja virtual'),
-                ] %}
-                {% for field, label in opcoes %}
-                <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--borda);border-radius:6px;cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="{{ field }}" value="1" style="accent-color:#4F46E5;" {% if p.get(field, 1 if field in ['visivel_painel','visivel_loja'] else 0) %}checked{% endif %}>
-                  {{ label }}
-                </label>
-                {% endfor %}
-              </div>
+              <label>Status do produto</label>
+              <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--borda);border-radius:6px;cursor:pointer;font-weight:400;max-width:280px;">
+                <input type="checkbox" name="ativo" value="1" style="accent-color:#10B981;" {% if produto is none or p.ativo %}checked{% endif %}>
+                Produto ativo (disponível para venda)
+              </label>
             </div>
           </div>
         </div>
@@ -291,8 +279,12 @@
           <span><strong>Atenção!</strong> As imagens devem ter no mínimo <strong>600x600px</strong> sendo o ideal <strong>1000x1000px</strong>.</span>
         </div>
         <div style="display:grid;grid-template-columns:260px 1fr;gap:32px;align-items:start;">
-          <div id="img-preview" style="width:260px;height:260px;background:#F1F5F9;border-radius:10px;display:flex;align-items:center;justify-content:center;border:2px dashed var(--borda);">
+          <div id="img-preview" style="width:260px;height:260px;background:#F1F5F9;border-radius:10px;display:flex;align-items:center;justify-content:center;border:2px dashed var(--borda);overflow:hidden;">
+            {% if p.imagem %}
+            <img src="{{ url_for('static', filename='uploads/'~p.imagem) }}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">
+            {% else %}
             <i data-lucide="image" style="width:48px;height:48px;color:#CBD5E1;"></i>
+            {% endif %}
           </div>
           <div>
             <div class="form-group">
@@ -318,92 +310,84 @@
       <div class="card-body">
         <div class="tipo-preco-grid">
           {% set tipos = [
-            ('quantidade','PREÇO POR QUANTIDADE','Valores e quantidades pré-definidas'),
-            ('metro','PREÇO POR METRO','Para formatos personalizados'),
-            ('fixo','PREÇO FIXO','Venda por unidades'),
-            ('demanda','PREÇO POR DEMANDA','De acordo com a quantidade'),
-            ('consulta','SOB CONSULTA','Não é vendido online'),
+            ('fixo','PREÇO FIXO','Um valor, multiplicado pela quantidade'),
+            ('metro','PREÇO POR M²','Preço por m²; calcula pela medida no pedido'),
+            ('demanda','PREÇO POR DEMANDA','Faixas de quantidade com preços diferentes'),
           ] %}
+          {% set tp_atual = p.tipo_preco if p.tipo_preco in ['fixo','metro','demanda'] else 'fixo' %}
           {% for val, label, desc in tipos %}
-          <label class="tipo-preco-card {% if (p.tipo_preco or 'quantidade') == val %}selecionado{% endif %}">
-            <input type="radio" name="tipo_preco" value="{{ val }}" {% if (p.tipo_preco or 'quantidade') == val %}checked{% endif %} onchange="marcarTipo(this)">
+          <label class="tipo-preco-card {% if tp_atual == val %}selecionado{% endif %}">
+            <input type="radio" name="tipo_preco" value="{{ val }}" {% if tp_atual == val %}checked{% endif %} onchange="marcarTipo(this)">
             <div class="tp-label">{{ label }}</div>
             <div class="tp-desc">{{ desc }}</div>
           </label>
           {% endfor %}
         </div>
 
-        <div class="preco-table" id="preco-table">
-          <div class="preco-row preco-header">
-            <span>QUANT. *</span><span>PREÇO ANTERIOR</span><span>PREÇO VENDA *</span>
-            <span>PREÇO CUSTO</span><span>PESO (KG)</span><span>LARGURA (CM)</span>
-            <span>ALTURA (CM)</span><span>COMPRIMENTO (CM)</span><span></span>
-          </div>
-          <div id="preco-lista">
-            {% if p.precos %}
-              {% for pr in p.precos %}
-              <div class="preco-row preco-linha">
-                <input type="number" class="form-control pc-qtd" min="1" value="{{ pr.quantidade or '' }}" placeholder="">
-                <input type="number" class="form-control pc-ant" min="0" step="0.01" value="{{ pr.preco_anterior or '' }}" placeholder="">
-                <input type="number" class="form-control pc-venda" min="0" step="0.01" value="{{ pr.preco_venda or '' }}" placeholder="">
-                <input type="number" class="form-control pc-custo" min="0" step="0.01" value="{{ pr.preco_custo or '' }}" placeholder="">
-                <input type="number" class="form-control pc-peso" min="0" step="0.001" value="{{ pr.peso or '' }}" placeholder="">
-                <input type="number" class="form-control pc-larg" min="0" step="0.1" value="{{ pr.largura or '' }}" placeholder="">
-                <input type="number" class="form-control pc-alt" min="0" step="0.1" value="{{ pr.altura or '' }}" placeholder="">
-                <input type="number" class="form-control pc-comp" min="0" step="0.1" value="{{ pr.comprimento or '' }}" placeholder="">
-                <div style="display:flex;align-items:center;justify-content:center;">
-                  <button type="button" class="btn btn-ghost btn-sm btn-rm-preco"><i data-lucide="x"></i></button>
-                </div>
-              </div>
-              {% endfor %}
-            {% endif %}
+        {% set valor_inicial = (p.precos[0].preco_venda if p.precos else None) or p.preco or '' %}
+
+        <!-- VALOR ÚNICO (preço fixo / preço por m²) -->
+        <div id="wrap-valor" style="{% if tp_atual == 'demanda' %}display:none;{% endif %}max-width:360px;">
+          <div class="form-group">
+            <label id="lbl-valor">{{ 'Preço por m² (R$)' if tp_atual == 'metro' else 'Preço de venda (R$)' }}</label>
+            <div style="display:flex;align-items:center;gap:0;">
+              <span style="padding:9px 12px;background:#F8F9FA;border:1.5px solid var(--borda);border-right:none;border-radius:6px 0 0 6px;font-size:.8rem;color:var(--texto-leve);">R$</span>
+              <input type="number" id="preco-unico" class="form-control" style="border-radius:0 6px 6px 0;" min="0" step="0.01" value="{{ valor_inicial }}" placeholder="0,00">
+            </div>
+            <p class="text-muted text-sm mt-16" id="hint-valor">{{ 'Defina o preço por metro quadrado. Na hora do pedido você informa largura e altura, e o sistema calcula a área × este valor.' if tp_atual == 'metro' else 'O sistema multiplica este valor pela quantidade no pedido.' }}</p>
           </div>
         </div>
-        <button type="button" id="btn-add-preco" class="btn btn-primario btn-sm mt-16">
-          <i data-lucide="plus"></i> Adicionar valor
-        </button>
+
+        <!-- TABELA POR DEMANDA (faixas de quantidade) -->
+        <div id="wrap-demanda" style="{% if tp_atual != 'demanda' %}display:none;{% endif %}">
+          <div class="demanda-hint">
+            <i data-lucide="info"></i>
+            <span>Defina faixas de quantidade com preços diferentes. Ex.: de <strong>1</strong> a <strong>5</strong> unidades R$ X, de <strong>6</strong> a <strong>20</strong> R$ Y. Deixe o campo <strong>ATÉ</strong> em branco na última faixa para "ou mais".</span>
+          </div>
+          <div class="preco-table" id="demanda-table">
+            <div class="demanda-row preco-header">
+              <span>DE (QTD) *</span><span>ATÉ (QTD)</span><span>PREÇO VENDA *</span><span></span>
+            </div>
+            <div id="demanda-lista">
+              {% if p.precos and tp_atual == 'demanda' %}
+                {% for pr in p.precos %}
+                <div class="demanda-row demanda-linha">
+                  <input type="number" class="form-control dm-min" min="1" value="{{ pr.qtd_min or '' }}" placeholder="1">
+                  <input type="number" class="form-control dm-max" min="1" value="{{ pr.qtd_max or '' }}" placeholder="ou mais">
+                  <input type="number" class="form-control dm-venda" min="0" step="0.01" value="{{ pr.preco_venda or '' }}" placeholder="0,00">
+                  <div style="display:flex;align-items:center;justify-content:center;">
+                    <button type="button" class="btn btn-ghost btn-sm btn-rm-demanda"><i data-lucide="x"></i></button>
+                  </div>
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+          <button type="button" id="btn-add-demanda" class="btn btn-primario btn-sm mt-16">
+            <i data-lucide="plus"></i> Adicionar faixa
+          </button>
+        </div>
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div class="card">
-        <div class="card-header"><h3>Desconto para revendedor</h3></div>
-        <div class="card-body">
-          <p class="text-muted text-sm mb-16">Ofereça um desconto especial para seus revendedores.</p>
-          <div class="form-grid form-grid-2">
-            <div class="form-group">
-              <label>Tipo</label>
-              <select name="desconto_revendedor_tipo" class="form-control">
-                <option {% if (p.desconto_revendedor_tipo or '%') == '%' %}selected{% endif %}>%</option>
-                <option {% if p.desconto_revendedor_tipo == 'R$' %}selected{% endif %}>R$</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Valor do desconto</label>
-              <input type="number" name="desconto_revendedor_valor" class="form-control" min="0" step="0.01" value="{{ p.desconto_revendedor_valor or '' }}" placeholder="">
-            </div>
+    <div class="card">
+      <div class="card-header"><h3>Desconto para revendedor</h3></div>
+      <div class="card-body">
+        <p class="text-muted text-sm mb-16">Ofereça um desconto especial para seus revendedores.</p>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Tipo</label>
+            <select name="desconto_revendedor_tipo" class="form-control">
+              <option {% if (p.desconto_revendedor_tipo or '%') == '%' %}selected{% endif %}>%</option>
+              <option {% if p.desconto_revendedor_tipo == 'R$' %}selected{% endif %}>R$</option>
+            </select>
           </div>
-          <p class="text-muted text-sm">Não pode ser maior que o valor do produto</p>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>Cronômetro de oferta</h3></div>
-        <div class="card-body">
-          <p class="text-muted text-sm mb-16">Exibe contagem regressiva até a oferta expirar.</p>
-          <div class="form-grid form-grid-2">
-            <div class="form-group">
-              <label>Condição</label>
-              <select name="oferta_condicao" class="form-control">
-                <option>Desativado</option>
-                <option>Ativado</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Oferta expira em</label>
-              <input type="date" name="oferta_expira" class="form-control">
-            </div>
+          <div class="form-group">
+            <label>Valor do desconto</label>
+            <input type="number" name="desconto_revendedor_valor" class="form-control" min="0" step="0.01" value="{{ p.desconto_revendedor_valor or '' }}" placeholder="">
           </div>
         </div>
+        <p class="text-muted text-sm">Não pode ser maior que o valor do produto</p>
       </div>
     </div>
   </div>
@@ -587,31 +571,44 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 function marcarTipo(input) {
   document.querySelectorAll('.tipo-preco-card').forEach(c => c.classList.remove('selecionado'));
   input.closest('.tipo-preco-card').classList.add('selecionado');
+  aplicarTipoPreco(input.value);
 }
 
-// ─── LINHAS DE PREÇO ─────────────────────────────────────────────────────
-function addPrecoLinha() {
+function aplicarTipoPreco(tipo) {
+  const ehDemanda = tipo === 'demanda';
+  document.getElementById('wrap-demanda').style.display = ehDemanda ? '' : 'none';
+  document.getElementById('wrap-valor').style.display = ehDemanda ? 'none' : '';
+  if (ehDemanda && !document.querySelector('.demanda-linha')) addDemandaLinha();
+  // ajusta rótulo do campo de valor (fixo vs metro)
+  const lbl = document.getElementById('lbl-valor');
+  const hint = document.getElementById('hint-valor');
+  if (tipo === 'metro') {
+    if (lbl) lbl.textContent = 'Preço por m² (R$)';
+    if (hint) hint.textContent = 'Defina o preço por metro quadrado. Na hora do pedido você informa largura e altura, e o sistema calcula a área × este valor.';
+  } else if (tipo === 'fixo') {
+    if (lbl) lbl.textContent = 'Preço de venda (R$)';
+    if (hint) hint.textContent = 'O sistema multiplica este valor pela quantidade no pedido.';
+  }
+}
+
+// ─── LINHAS DE DEMANDA (faixas de quantidade) ────────────────────────────
+function addDemandaLinha() {
   const div = document.createElement('div');
-  div.className = 'preco-row preco-linha';
+  div.className = 'demanda-row demanda-linha';
   div.innerHTML = `
-    <input type="number" class="form-control pc-qtd" min="1" placeholder="">
-    <input type="number" class="form-control pc-ant" min="0" step="0.01" placeholder="">
-    <input type="number" class="form-control pc-venda" min="0" step="0.01" placeholder="">
-    <input type="number" class="form-control pc-custo" min="0" step="0.01" placeholder="">
-    <input type="number" class="form-control pc-peso" min="0" step="0.001" placeholder="">
-    <input type="number" class="form-control pc-larg" min="0" step="0.1" placeholder="">
-    <input type="number" class="form-control pc-alt" min="0" step="0.1" placeholder="">
-    <input type="number" class="form-control pc-comp" min="0" step="0.1" placeholder="">
+    <input type="number" class="form-control dm-min" min="1" placeholder="1">
+    <input type="number" class="form-control dm-max" min="1" placeholder="ou mais">
+    <input type="number" class="form-control dm-venda" min="0" step="0.01" placeholder="0,00">
     <div style="display:flex;align-items:center;justify-content:center;">
-      <button type="button" class="btn btn-ghost btn-sm btn-rm-preco"><i data-lucide="x"></i></button>
+      <button type="button" class="btn btn-ghost btn-sm btn-rm-demanda"><i data-lucide="x"></i></button>
     </div>`;
-  div.querySelector('.btn-rm-preco').addEventListener('click', () => { div.remove(); });
-  document.getElementById('preco-lista').appendChild(div);
+  div.querySelector('.btn-rm-demanda').addEventListener('click', () => { div.remove(); });
+  document.getElementById('demanda-lista').appendChild(div);
   lucide.createIcons();
 }
 
-document.getElementById('btn-add-preco').addEventListener('click', addPrecoLinha);
-document.querySelectorAll('.btn-rm-preco').forEach(b => b.addEventListener('click', () => b.closest('.preco-linha').remove()));
+document.getElementById('btn-add-demanda').addEventListener('click', addDemandaLinha);
+document.querySelectorAll('.btn-rm-demanda').forEach(b => b.addEventListener('click', () => b.closest('.demanda-linha').remove()));
 
 // ─── LINHAS DE VARIAÇÃO ──────────────────────────────────────────────────
 function addVarLinha() {
@@ -650,19 +647,27 @@ function previewImg(input) {
 
 // ─── SERIALIZAR ANTES DE SALVAR ──────────────────────────────────────────
 document.getElementById('form-produto').addEventListener('submit', function() {
+  const tipo = document.querySelector('input[name=tipo_preco]:checked');
+  const ehDemanda = tipo && tipo.value === 'demanda';
   const precos = [];
-  document.querySelectorAll('.preco-linha').forEach(l => {
-    precos.push({
-      quantidade: l.querySelector('.pc-qtd').value,
-      preco_anterior: l.querySelector('.pc-ant').value,
-      preco_venda: l.querySelector('.pc-venda').value,
-      preco_custo: l.querySelector('.pc-custo').value,
-      peso: l.querySelector('.pc-peso').value,
-      largura: l.querySelector('.pc-larg').value,
-      altura: l.querySelector('.pc-alt').value,
-      comprimento: l.querySelector('.pc-comp').value,
+
+  if (ehDemanda) {
+    // Faixas de quantidade: de X a Y com preço próprio
+    document.querySelectorAll('.demanda-linha').forEach(l => {
+      const min = l.querySelector('.dm-min').value;
+      const venda = l.querySelector('.dm-venda').value;
+      if (!min && !venda) return; // ignora linha vazia
+      precos.push({
+        qtd_min: min,
+        qtd_max: l.querySelector('.dm-max').value,
+        preco_venda: venda,
+      });
     });
-  });
+  } else {
+    // Preço fixo ou por m²: um único valor (preço fixo de venda OU preço por m²)
+    const valor = document.getElementById('preco-unico').value;
+    if (valor) precos.push({ quantidade: 1, preco_venda: valor });
+  }
   document.getElementById('precos_json').value = JSON.stringify(precos);
 
   const vars = [];
@@ -678,6 +683,10 @@ document.getElementById('form-produto').addEventListener('submit', function() {
   document.getElementById('variacoes_json').value = JSON.stringify(vars);
 });
 
-if (!document.querySelector('.preco-linha')) addPrecoLinha();
+// Inicializa a tabela correta conforme o tipo de preço selecionado
+(function initTipoPreco() {
+  const tipo = document.querySelector('input[name=tipo_preco]:checked');
+  aplicarTipoPreco(tipo ? tipo.value : 'fixo');
+})();
 </script>
 {% endblock %}

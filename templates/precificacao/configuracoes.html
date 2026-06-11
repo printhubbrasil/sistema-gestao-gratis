@@ -1106,14 +1106,14 @@ function editarMidiaBobina(m) {
   document.getElementById('midia_id_hidden').value = m.id;
   document.getElementById('midia_nome').value = m.nome;
   document.getElementById('midia_custo_m2').value = m.custo_m2;
-  document.getElementById('action-form-midia').action = `/precificacao/midia-bobina/${m.id}/editar`;
+  document.getElementById('action-form-midia').action = `{{ url_for("precificacao") }}/midia-bobina/${m.id}/editar`;
   document.getElementById('form-midia-bobina').scrollIntoView({behavior:'smooth'});
 }
 function cancelarEdicaoMidia() {
   document.getElementById('titulo-form-midia').textContent = '+ Nova Mídia em Bobina';
   document.getElementById('btn-salvar-midia').innerHTML = '<i data-lucide="save"></i> Salvar Mídia';
   document.getElementById('action-form-midia').reset();
-  document.getElementById('action-form-midia').action = '/precificacao/midia-bobina/nova';
+  document.getElementById('action-form-midia').action = '{{ url_for("precificacao") }}/midia-bobina/nova';
   lucide.createIcons();
 }
 if (window.location.hash) trocarTab(window.location.hash.replace('#',''));
@@ -1141,7 +1141,7 @@ function editarPapel(p) {
   document.getElementById('papel_fixo').checked = !!p.tamanho_fixo;
   togglePapelFixo();
   const form = document.getElementById('action-form-papel');
-  form.action = `/precificacao/papel/${p.id}/editar`;
+  form.action = `{{ url_for("precificacao") }}/papel/${p.id}/editar`;
   document.getElementById('form-papel').scrollIntoView({behavior:'smooth'});
   lucide.createIcons();
 }
@@ -1149,7 +1149,7 @@ function cancelarEdicaoPapel() {
   document.getElementById('titulo-form-papel').textContent = '+ Novo Papel / Mídia';
   document.getElementById('btn-salvar-papel').innerHTML = '<i data-lucide="save"></i> Salvar Papel';
   document.getElementById('action-form-papel').reset();
-  document.getElementById('action-form-papel').action = '/precificacao/papel/novo';
+  document.getElementById('action-form-papel').action = '{{ url_for("precificacao") }}/papel/novo';
   document.getElementById('papel_folhas').value = '500';
   document.getElementById('papel_perda').value = '5';
   document.getElementById('papel_fixo').checked = false;
@@ -1224,13 +1224,13 @@ function editarMaquina(m) {
     document.getElementById('maq_verniz').value = m.custo_m2_verniz || '';
     atualizarPreviewM2();
   }
-  document.getElementById('action-form-maquina').action = `/precificacao/maquina/${m.id}/editar`;
+  document.getElementById('action-form-maquina').action = `{{ url_for("precificacao") }}/maquina/${m.id}/editar`;
   document.getElementById('form-maquina').scrollIntoView({behavior:'smooth'});
 }
 function cancelarEdicaoMaquina() {
   document.getElementById('titulo-form-maquina').textContent = '+ Nova Máquina';
   document.getElementById('action-form-maquina').reset();
-  document.getElementById('action-form-maquina').action = '/precificacao/maquina/nova';
+  document.getElementById('action-form-maquina').action = '{{ url_for("precificacao") }}/maquina/nova';
   alternarTipoMaquina('click');
 }
 
@@ -1264,7 +1264,7 @@ function editarPapelao(p) {
   document.getElementById('papelao_altura').value = p.altura;
   document.getElementById('papelao_custo').value = p.custo;
   const form = document.getElementById('action-form-papelao');
-  form.action = `/precificacao/papelao/${p.id}/editar`;
+  form.action = `{{ url_for("precificacao") }}/papelao/${p.id}/editar`;
   atualizarPreviewPapelao();
   document.getElementById('form-papelao').scrollIntoView({behavior:'smooth'});
 }
@@ -1272,7 +1272,7 @@ function cancelarEdicaoPapelao() {
   document.getElementById('titulo-form-papelao').textContent = '+ Novo Papelão / Paraná';
   document.getElementById('btn-salvar-papelao').innerHTML = '<i data-lucide="save"></i> Salvar Papelão';
   document.getElementById('action-form-papelao').reset();
-  document.getElementById('action-form-papelao').action = '/precificacao/papelao/novo';
+  document.getElementById('action-form-papelao').action = '{{ url_for("precificacao") }}/papelao/novo';
   lucide.createIcons();
 }
 
@@ -1318,14 +1318,14 @@ function editarAcabamento(a) {
   if(a.tipo==='wireo') { document.getElementById('wireo_custo').value = a.bobina_custo || ''; document.getElementById('wireo_aneis').value = a.bobina_comprimento || ''; document.getElementById('wireo_mkp').value = a.markup || ''; atualizarPreviewWireo(); }
   const mkpId = {hora:'acab_mkp_hora',unidade:'acab_mkp_unit',job:'acab_mkp_job'}[a.tipo];
   if(mkpId) document.getElementById(mkpId).value = a.markup;
-  document.getElementById('action-form-acabamento').action = `/precificacao/acabamento/${a.id}/editar`;
+  document.getElementById('action-form-acabamento').action = `{{ url_for("precificacao") }}/acabamento/${a.id}/editar`;
   atualizarPreviewBobina();
   document.getElementById('form-acabamento').scrollIntoView({behavior:'smooth'});
 }
 function cancelarEdicaoAcabamento() {
   document.getElementById('titulo-form-acabamento').textContent = '+ Novo Acabamento / Processo';
   document.getElementById('action-form-acabamento').reset();
-  document.getElementById('action-form-acabamento').action = '/precificacao/acabamento/novo';
+  document.getElementById('action-form-acabamento').action = '{{ url_for("precificacao") }}/acabamento/novo';
   alternarTipoAcabamento('bobina');
 }
 
@@ -1368,13 +1368,13 @@ function editarAcabamentoUV(a) {
     document.getElementById('bob-uv-custo').value = a.bobina_custo;
     atualizarPreviewBobinaUV();
   }
-  document.getElementById('action-form-acabamento-uv').action = `/precificacao/acabamento-uv/${a.id}/editar`;
+  document.getElementById('action-form-acabamento-uv').action = `{{ url_for("precificacao") }}/acabamento-uv/${a.id}/editar`;
   document.getElementById('form-acabamento-uv').scrollIntoView({behavior:'smooth'});
 }
 function cancelarEdicaoAcabamentoUV() {
   document.getElementById('titulo-form-acabamento-uv').textContent = '+ Novo Acabamento UV/Eco';
   document.getElementById('action-form-acabamento-uv').reset();
-  document.getElementById('action-form-acabamento-uv').action = '/precificacao/acabamento-uv/novo';
+  document.getElementById('action-form-acabamento-uv').action = '{{ url_for("precificacao") }}/acabamento-uv/novo';
   // restore categoria value after reset
   document.querySelector('#action-form-acabamento-uv input[name="categoria"]').value = 'uv_eco';
   alternarTipoAcabamentoUV('unidade');
@@ -1394,13 +1394,13 @@ function editarAcrilico(a) {
   document.getElementById('acrilico_esp').value = a.espessura_mm;
   document.getElementById('acrilico_cor').value = a.cor;
   document.getElementById('acrilico_custo').value = a.custo;
-  document.getElementById('action-form-acrilico').action = `/precificacao/acrilico/${a.id}/editar`;
+  document.getElementById('action-form-acrilico').action = `{{ url_for("precificacao") }}/acrilico/${a.id}/editar`;
   document.getElementById('form-acrilico').scrollIntoView({behavior:'smooth'});
 }
 function cancelarEdicaoAcrilico() {
   document.getElementById('titulo-form-acrilico').textContent = '+ Nova Chapa de Acrílico';
   document.getElementById('action-form-acrilico').reset();
-  document.getElementById('action-form-acrilico').action = '/precificacao/acrilico/novo';
+  document.getElementById('action-form-acrilico').action = '{{ url_for("precificacao") }}/acrilico/novo';
 }
 
 // ── Equipamentos de Corte ─────────────────────────────────────────────────────
@@ -1415,14 +1415,14 @@ function editarMaqCorte(mc) {
   document.getElementById('maq_corte_id_hidden').value = mc.id;
   document.getElementById('maq_corte_nome').value = mc.nome;
   document.getElementById('maq_corte_hora').value = mc.custo_hora;
-  document.getElementById('action-form-maq-corte').action = `/precificacao/maquina-corte/${mc.id}/editar`;
+  document.getElementById('action-form-maq-corte').action = `{{ url_for("precificacao") }}/maquina-corte/${mc.id}/editar`;
   atualizarPreviewCorte();
   document.getElementById('form-maq-corte').scrollIntoView({behavior:'smooth'});
 }
 function cancelarEdicaoMaqCorte() {
   document.getElementById('titulo-form-maq-corte').textContent = '+ Novo Equipamento de Corte';
   document.getElementById('action-form-maq-corte').reset();
-  document.getElementById('action-form-maq-corte').action = '/precificacao/maquina-corte/nova';
+  document.getElementById('action-form-maq-corte').action = '{{ url_for("precificacao") }}/maquina-corte/nova';
   document.getElementById('preview-corte-min').textContent = 'R$ 0,0000';
   document.getElementById('preview-corte-seg').textContent = 'R$ 0,000000';
 }

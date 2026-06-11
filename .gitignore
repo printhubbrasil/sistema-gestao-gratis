@@ -33,3 +33,7 @@ env/
 
 # Logs
 *.log
+
+# Uploads de usuários (logos, fotos de produtos)
+static/uploads/*
+!static/uploads/.gitkeep

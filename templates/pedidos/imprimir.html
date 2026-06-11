@@ -81,6 +81,7 @@
 <div class="page">
   <div class="doc-header">
     <div>
+      {% if empresa_logo %}<img src="{{ url_for('static', filename='uploads/' ~ empresa_logo) }}" alt="{{ empresa_nome }}" style="max-height:70px;max-width:240px;margin-bottom:8px;display:block;">{% endif %}
       <div class="empresa-nome">{{ empresa_nome }}</div>
       <div class="empresa-sub">{{ empresa_cidade }} · {{ empresa_telefone }} · {{ empresa_site }}</div>
     </div>
@@ -125,7 +126,14 @@
     <tbody>
       {% for i in pedido.itens %}
       <tr>
-        <td>{{ i.descricao or i.produto_nome or '—' }}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            {% if i.produto_imagem %}
+            <img src="{{ url_for('static', filename='uploads/' ~ i.produto_imagem) }}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #ddd;flex-shrink:0;">
+            {% endif %}
+            <span>{{ i.descricao or i.produto_nome or '—' }}</span>
+          </div>
+        </td>
         <td style="text-align:right">{{ i.quantidade }}</td>
         <td style="text-align:right">R$ {{ "%.2f"|format(i.preco_unitario) }}</td>
         <td style="text-align:right"><strong>R$ {{ "%.2f"|format(i.subtotal) }}</strong></td>

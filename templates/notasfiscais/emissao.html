@@ -31,7 +31,12 @@
       <div class="card-header"><h3>Dados do Cliente / Tomador</h3></div>
       <div class="card-body">
         <div class="form-group">
-          <label>Selecionar cliente cadastrado</label>
+          <div class="d-flex justify-between align-center">
+            <label>Selecionar cliente cadastrado</label>
+            <button type="button" class="btn btn-secundario btn-sm" style="font-size:.85rem;" onclick="abrirModalCliente('select-cliente')">
+              <i data-lucide="user-plus"></i> Novo cliente
+            </button>
+          </div>
           <select name="cliente_id" class="form-control" id="select-cliente" onchange="preencherCliente(this)">
             <option value="">— Buscar na lista —</option>
             {% for c in clientes %}
@@ -80,6 +85,8 @@
     </div>
   </form>
 </div>
+
+{% include '_modal_cliente.html' %}
 {% endblock %}
 
 {% block scripts %}

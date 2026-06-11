@@ -1,7 +1,10 @@
 import sys
 import os
 import json
+import re
 import time
+import urllib.request
+import urllib.error
 from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session
 import database as db
@@ -22,14 +25,22 @@ if sys.stdout.encoding != 'utf-8':
 
 app = Flask(__name__)
 
-# ─── DADOS DA EMPRESA (via env vars) ──────────────────────────────────────────
+# ─── DADOS DA EMPRESA (config do banco sobrepõe env vars) ─────────────────────
+def _empresa_cfg(chave, env, padrao):
+    """Valor salvo na Personalização; se vazio, cai no env var; senão padrão."""
+    val = db.prec_get_config(chave, None)
+    if val:
+        return val
+    return os.environ.get(env, padrao)
+
 @app.context_processor
 def inject_empresa():
     return dict(
-        empresa_nome     = os.environ.get('EMPRESA_NOME',      'Minha Gráfica'),
-        empresa_cidade   = os.environ.get('EMPRESA_CIDADE',    'Cidade — UF'),
-        empresa_telefone = os.environ.get('EMPRESA_TELEFONE',  '(00) 00000-0000'),
-        empresa_site     = os.environ.get('EMPRESA_SITE',      'minhagrafica.com.br'),
+        empresa_nome     = _empresa_cfg('empresa_nome',     'EMPRESA_NOME',     'Minha Gráfica'),
+        empresa_cidade   = _empresa_cfg('empresa_cidade',   'EMPRESA_CIDADE',   'Cidade — UF'),
+        empresa_telefone = _empresa_cfg('empresa_telefone', 'EMPRESA_TELEFONE', '(00) 00000-0000'),
+        empresa_site     = _empresa_cfg('empresa_site',     'EMPRESA_SITE',     'minhagrafica.com.br'),
+        empresa_logo     = db.prec_get_config('empresa_logo', None) or None,
     )
 
 # Chave secreta: defina SECRET_KEY no .env em produção
@@ -41,7 +52,7 @@ app.secret_key = _secret
 
 # ─── CONFIGURAÇÕES DE SEGURANÇA ───────────────────────────────────────────────
 
-app.config['MAX_CONTENT_LENGTH']        = 5 * 1024 * 1024   # upload máx 5 MB
+app.config['MAX_CONTENT_LENGTH']        = 10 * 1024 * 1024   # upload máx 10 MB (alinhado ao client_max_body_size do nginx)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['SESSION_COOKIE_HTTPONLY']   = True
 app.config['SESSION_COOKIE_SAMESITE']  = 'Lax'
@@ -244,6 +255,115 @@ def api_clientes():
     lista = db.get_clientes(request.args.get('q'))
     return jsonify(lista)
 
+@app.route('/clientes/api/criar', methods=['POST'])
+def api_criar_cliente():
+    dados = request.get_json(silent=True) or request.form
+    nome = (dados.get('nome') or '').strip()
+    if not nome:
+        return jsonify({'ok': False, 'erro': 'O nome é obrigatório.'}), 400
+    novo_id = db.criar_cliente(dados)
+    return jsonify({
+        'ok': True,
+        'id': novo_id,
+        'nome': nome,
+        'cpf_cnpj': (dados.get('cpf_cnpj') or '').strip(),
+    })
+
+def _consultar_cnpj(cnpj):
+    """Consulta dados de empresa por CNPJ na BrasilAPI (gratuita, sem chave)."""
+    url = f'https://brasilapi.com.br/api/cnpj/v1/{cnpj}'
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'sistema-gestao-graficas'})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            d = json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {'ok': False, 'erro': 'CNPJ não encontrado na Receita Federal.'}
+        if e.code == 400:
+            return {'ok': False, 'erro': 'CNPJ inválido. Confira os números digitados.'}
+        return {'ok': False, 'erro': f'Erro ao consultar o CNPJ (HTTP {e.code}).'}
+    except Exception:
+        return {'ok': False, 'erro': 'Não foi possível consultar o CNPJ agora. Verifique a conexão e tente novamente.'}
+
+    razao = (d.get('razao_social') or '').strip()
+    fantasia = (d.get('nome_fantasia') or '').strip()
+    partes_end = [p for p in [
+        (d.get('logradouro') or '').strip(),
+        (d.get('numero') or '').strip(),
+        (d.get('bairro') or '').strip(),
+    ] if p]
+    return {
+        'ok': True,
+        'tipo': 'cnpj',
+        'nome': razao or fantasia,
+        'nome_fantasia': fantasia,
+        'telefone': (d.get('ddd_telefone_1') or '').strip(),
+        'email': (d.get('email') or '').strip().lower(),
+        'cep': (d.get('cep') or '').strip(),
+        'endereco': ', '.join(partes_end),
+        'cidade': (d.get('municipio') or '').strip(),
+        'estado': (d.get('uf') or '').strip(),
+    }
+
+@app.route('/clientes/api/consulta-documento')
+def api_consulta_documento():
+    doc = re.sub(r'\D', '', request.args.get('doc', ''))
+    if len(doc) == 14:
+        return jsonify(_consultar_cnpj(doc))
+    if len(doc) == 11:
+        return jsonify({
+            'ok': False,
+            'tipo': 'cpf',
+            'erro': 'Consulta automática de CPF não está disponível (dados de pessoa física são protegidos pela LGPD). Preencha os dados manualmente.',
+        })
+    return jsonify({'ok': False, 'erro': 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.'}), 400
+
+# ─── PERSONALIZAÇÃO (dados da empresa + logo) ─────────────────────────────────
+
+ALLOWED_LOGO_EXT = {'png', 'jpg', 'jpeg', 'webp', 'svg', 'gif'}
+
+def _logo_dir():
+    return os.path.join(app.static_folder, 'uploads')
+
+def _remover_logo_atual():
+    atual = db.prec_get_config('empresa_logo', None)
+    if atual:
+        try:
+            os.remove(os.path.join(_logo_dir(), atual))
+        except OSError:
+            pass
+
+@app.route('/personalizacao', methods=['GET', 'POST'])
+def personalizacao():
+    if session.get('nivel') != 'admin':
+        flash('Acesso restrito ao administrador.', 'danger')
+        return redirect(url_for('home'))
+
+    if request.method == 'POST':
+        for campo in ['empresa_nome', 'empresa_cidade', 'empresa_telefone', 'empresa_site']:
+            db.prec_set_config(campo, (request.form.get(campo) or '').strip())
+
+        if request.form.get('remover_logo'):
+            _remover_logo_atual()
+            db.prec_set_config('empresa_logo', '')
+
+        f = request.files.get('logo')
+        if f and f.filename:
+            ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+            if ext not in ALLOWED_LOGO_EXT:
+                flash('Formato de imagem inválido. Use PNG, JPG, WEBP, GIF ou SVG.', 'danger')
+                return redirect(url_for('personalizacao'))
+            os.makedirs(_logo_dir(), exist_ok=True)
+            _remover_logo_atual()
+            nome = f'logo_empresa_{int(time.time())}.{ext}'
+            f.save(os.path.join(_logo_dir(), nome))
+            db.prec_set_config('empresa_logo', nome)
+
+        flash('Personalização salva com sucesso!', 'success')
+        return redirect(url_for('personalizacao'))
+
+    return render_template('personalizacao.html')
+
 # ─── PRODUTOS ─────────────────────────────────────────────────────────────────
 
 @app.route('/produtos')
@@ -253,13 +373,28 @@ def produtos():
     categorias = db.get_categorias()
     return render_template('produtos/lista.html', produtos=lista, categorias=categorias, busca=busca)
 
+def _salvar_imagem_produto(file_storage):
+    """Salva a imagem do produto em static/uploads e retorna o nome do arquivo, ou None."""
+    f = file_storage
+    if not (f and f.filename):
+        return None
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    if ext not in ALLOWED_LOGO_EXT:
+        flash('Formato de imagem inválido. Use PNG, JPG, WEBP, GIF ou SVG.', 'danger')
+        return None
+    os.makedirs(_logo_dir(), exist_ok=True)
+    nome = f'produto_{int(time.time()*1000)}.{ext}'
+    f.save(os.path.join(_logo_dir(), nome))
+    return nome
+
 @app.route('/produtos/novo', methods=['GET', 'POST'])
 def novo_produto():
     if request.method == 'POST':
         precos = json.loads(request.form.get('precos_json', '[]'))
         variacoes = json.loads(request.form.get('variacoes_json', '[]'))
         categorias_sel = request.form.getlist('categorias_sel')
-        db.criar_produto(request.form, precos, variacoes, categorias_sel)
+        imagem = _salvar_imagem_produto(request.files.get('imagem_principal'))
+        db.criar_produto(request.form, precos, variacoes, categorias_sel, imagem=imagem)
         flash('Produto cadastrado!', 'success')
         return redirect(url_for('produtos'))
     return render_template('produtos/form.html', produto=None)
@@ -271,7 +406,10 @@ def editar_produto(id):
         precos = json.loads(request.form.get('precos_json', '[]'))
         variacoes = json.loads(request.form.get('variacoes_json', '[]'))
         categorias_sel = request.form.getlist('categorias_sel')
-        db.atualizar_produto(id, request.form, precos, variacoes, categorias_sel)
+        nova_imagem = _salvar_imagem_produto(request.files.get('imagem_principal'))
+        # mantém a imagem atual se nenhuma nova foi enviada
+        imagem = nova_imagem if nova_imagem else (produto.get('imagem') if produto else None)
+        db.atualizar_produto(id, request.form, precos, variacoes, categorias_sel, imagem=imagem)
         flash('Produto atualizado!', 'success')
         return redirect(url_for('produtos'))
     return render_template('produtos/form.html', produto=produto)
@@ -307,7 +445,7 @@ def novo_pedido():
         itens = json.loads(request.form.get('itens_json', '[]'))
         pedido_id = db.criar_pedido(request.form, itens)
         flash(f'Pedido #{pedido_id} criado!', 'success')
-        return redirect(url_for('pedidos'))
+        return redirect(url_for('ver_pedido', id=pedido_id))
     clientes = db.get_clientes()
     produtos = db.get_produtos()
     return render_template('pedidos/form.html', pedido=None, clientes=clientes, produtos=produtos)
@@ -319,7 +457,7 @@ def editar_pedido(id):
         itens = json.loads(request.form.get('itens_json', '[]'))
         db.atualizar_pedido(id, request.form, itens)
         flash('Pedido atualizado!', 'success')
-        return redirect(url_for('pedidos'))
+        return redirect(url_for('ver_pedido', id=id))
     clientes = db.get_clientes()
     produtos = db.get_produtos()
     return render_template('pedidos/form.html', pedido=pedido, clientes=clientes, produtos=produtos)
@@ -743,6 +881,8 @@ def nfe_upload():
     insumos = db.nfe_get_todos_insumos()
     for item in dados['itens']:
         item['mapeamento'] = db.nfe_get_mapeamento(dados['cnpj'], item['codigo'])
+        # se não tem mapeamento salvo (código), tenta casar pelo nome do insumo
+        item['match_nome'] = None if item['mapeamento'] else db.nfe_match_por_nome(item['descricao'])
     historico = db.nfe_get_historico()
     return render_template('nfe/importar.html', historico=historico, nfe=dados, insumos=insumos)
 

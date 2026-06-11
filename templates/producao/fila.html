@@ -120,7 +120,7 @@ document.getElementById('modal-overlay').addEventListener('click', function(e) {
 
 /* ── Atualizar status via API ───────────────────────────────────────── */
 function atualizarStatus(id, novoStatus, card) {
-  return fetch(`/producao/${id}/status`, {
+  return fetch(`{{ url_for("producao") }}/${id}/status`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({status: novoStatus})

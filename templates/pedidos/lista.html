@@ -60,6 +60,9 @@
           <td class="text-muted">{{ p.created_at[:10] }}</td>
           <td>
             <div class="d-flex gap-8">
+              <a href="{{ url_for('ver_pedido', id=p.id) }}" class="btn btn-ghost btn-sm" title="Ver / Imprimir / Enviar">
+                <i data-lucide="eye"></i>
+              </a>
               <a href="{{ url_for('editar_pedido', id=p.id) }}" class="btn btn-ghost btn-sm" title="Editar">
                 <i data-lucide="pencil"></i>
               </a>
@@ -89,7 +92,7 @@
 function atualizarStatus(id, status, el) {
   el.className = 'badge badge-' + status;
   el.style.cssText = 'border:none;cursor:pointer;font-weight:600;font-size:.75rem;border-radius:20px;padding:3px 10px;';
-  fetch(`/pedidos/${id}/status`, {
+  fetch(`{{ url_for("pedidos") }}/${id}/status`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({status})

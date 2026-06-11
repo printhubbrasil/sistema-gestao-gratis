@@ -411,7 +411,7 @@ function criarOrcamento() {
     preco_venda: {{ calculo.preco_venda or 0 }},
   };
   sessionStorage.setItem('calc_para_orcamento', JSON.stringify(dados));
-  window.location.href = '/orcamentos/novo?from_calc=1';
+  window.location.href = '{{ url_for("novo_orcamento") }}?from_calc=1';
 }
 </script>
 {% endif %}

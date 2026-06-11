@@ -38,6 +38,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS produtos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
+            imagem TEXT,
             prazo_producao TEXT,
             selo_destaque TEXT DEFAULT 'Nenhum',
             sku TEXT,
@@ -85,6 +86,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             produto_id INTEGER REFERENCES produtos(id) ON DELETE CASCADE,
             quantidade REAL,
+            qtd_min REAL,
+            qtd_max REAL,
             preco_anterior REAL DEFAULT 0,
             preco_venda REAL DEFAULT 0,
             preco_custo REAL DEFAULT 0,
@@ -460,6 +463,21 @@ def init_db():
         conn.commit()
     except Exception:
         pass
+    try:
+        c.execute("ALTER TABLE produto_precos ADD COLUMN qtd_min REAL")
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE produto_precos ADD COLUMN qtd_max REAL")
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE produtos ADD COLUMN imagem TEXT")
+        conn.commit()
+    except Exception:
+        pass
 
     # Admin padrão
     c.execute("SELECT COUNT(*) FROM usuarios")
@@ -501,12 +519,14 @@ def get_cliente(id):
 
 def criar_cliente(form):
     conn = get_db()
-    conn.execute('''INSERT INTO clientes (nome,email,telefone,cpf_cnpj,endereco,cidade,estado,cep,observacoes)
+    cur = conn.execute('''INSERT INTO clientes (nome,email,telefone,cpf_cnpj,endereco,cidade,estado,cep,observacoes)
                     VALUES (?,?,?,?,?,?,?,?,?)''',
         (form.get('nome'), form.get('email'), form.get('telefone'), form.get('cpf_cnpj'),
          form.get('endereco'), form.get('cidade'), form.get('estado'), form.get('cep'), form.get('observacoes')))
     conn.commit()
+    novo_id = cur.lastrowid
     conn.close()
+    return novo_id
 
 def atualizar_cliente(id, form):
     conn = get_db()
@@ -542,7 +562,7 @@ def get_produto(id):
         conn.close()
         return None
     p = dict(row)
-    p['precos'] = [dict(r) for r in conn.execute("SELECT * FROM produto_precos WHERE produto_id=? ORDER BY quantidade", (id,)).fetchall()]
+    p['precos'] = [dict(r) for r in conn.execute("SELECT * FROM produto_precos WHERE produto_id=? ORDER BY COALESCE(qtd_min, quantidade)", (id,)).fetchall()]
     p['variacoes'] = [dict(r) for r in conn.execute("SELECT * FROM produto_variacoes WHERE produto_id=? ORDER BY id", (id,)).fetchall()]
     p['categorias'] = [r[0] for r in conn.execute("SELECT categoria_nome FROM produto_categorias WHERE produto_id=?", (id,)).fetchall()]
     conn.close()
@@ -558,9 +578,10 @@ def _salvar_produto_dados(conn, produto_id, form, precos_json, variacoes_json, c
     import json
     conn.execute("DELETE FROM produto_precos WHERE produto_id=?", (produto_id,))
     for p in (precos_json or []):
-        conn.execute('''INSERT INTO produto_precos (produto_id,quantidade,preco_anterior,preco_venda,preco_custo,peso,largura,altura,comprimento)
-                        VALUES (?,?,?,?,?,?,?,?,?)''',
-            (produto_id, p.get('quantidade'), p.get('preco_anterior'), p.get('preco_venda'),
+        conn.execute('''INSERT INTO produto_precos (produto_id,quantidade,qtd_min,qtd_max,preco_anterior,preco_venda,preco_custo,peso,largura,altura,comprimento)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+            (produto_id, p.get('quantidade'), p.get('qtd_min'), p.get('qtd_max'),
+             p.get('preco_anterior'), p.get('preco_venda'),
              p.get('preco_custo'), p.get('peso'), p.get('largura'), p.get('altura'), p.get('comprimento')))
 
     conn.execute("DELETE FROM produto_variacoes WHERE produto_id=?", (produto_id,))
@@ -575,20 +596,20 @@ def _salvar_produto_dados(conn, produto_id, form, precos_json, variacoes_json, c
     for cat in (categorias_lista or []):
         conn.execute("INSERT INTO produto_categorias (produto_id,categoria_nome) VALUES (?,?)", (produto_id, cat))
 
-def criar_produto(form, precos_json=None, variacoes_json=None, categorias_lista=None):
+def criar_produto(form, precos_json=None, variacoes_json=None, categorias_lista=None, imagem=None):
     import json
     conn = get_db()
     primeiro_preco = (precos_json or [{}])[0].get('preco_venda') or 0
     c = conn.execute('''INSERT INTO produtos
-        (nome,prazo_producao,selo_destaque,sku,mpn,gtin_ean,como_despachado,quem_pode_comprar,
+        (nome,imagem,prazo_producao,selo_destaque,sku,mpn,gtin_ean,como_despachado,quem_pode_comprar,
          visivel_painel,visivel_loja,visivel_geral,visivel_orcamento,
          espec_formato,espec_material,espec_revestimento,espec_acabamento,espec_cores,espec_extras,
          precisa_arte,valor_arte,url_video,descricao_curta,descricao,tipo_preco,
          desconto_revendedor_tipo,desconto_revendedor_valor,
          ncm,cfop,cest,icms_origem,icms_cst,icms_aliquota,ipi_cst,ipi_aliquota,
          pis_cst,pis_aliquota,cofins_cst,cofins_aliquota,unidade,preco,ativo)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-        (form.get('nome'), form.get('prazo_producao'), form.get('selo_destaque','Nenhum'),
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (form.get('nome'), imagem, form.get('prazo_producao'), form.get('selo_destaque','Nenhum'),
          form.get('sku'), form.get('mpn'), form.get('gtin_ean'),
          form.get('como_despachado','Todos'), form.get('quem_pode_comprar','Todos'),
          1 if form.get('visivel_painel') else 0, 1 if form.get('visivel_loja') else 0,
@@ -609,11 +630,11 @@ def criar_produto(form, precos_json=None, variacoes_json=None, categorias_lista=
     conn.commit()
     conn.close()
 
-def atualizar_produto(id, form, precos_json=None, variacoes_json=None, categorias_lista=None):
+def atualizar_produto(id, form, precos_json=None, variacoes_json=None, categorias_lista=None, imagem=None):
     conn = get_db()
     primeiro_preco = (precos_json or [{}])[0].get('preco_venda') or 0
     conn.execute('''UPDATE produtos SET
-        nome=?,prazo_producao=?,selo_destaque=?,sku=?,mpn=?,gtin_ean=?,como_despachado=?,quem_pode_comprar=?,
+        nome=?,imagem=?,prazo_producao=?,selo_destaque=?,sku=?,mpn=?,gtin_ean=?,como_despachado=?,quem_pode_comprar=?,
         visivel_painel=?,visivel_loja=?,visivel_geral=?,visivel_orcamento=?,
         espec_formato=?,espec_material=?,espec_revestimento=?,espec_acabamento=?,espec_cores=?,espec_extras=?,
         precisa_arte=?,valor_arte=?,url_video=?,descricao_curta=?,descricao=?,tipo_preco=?,
@@ -621,7 +642,7 @@ def atualizar_produto(id, form, precos_json=None, variacoes_json=None, categoria
         ncm=?,cfop=?,cest=?,icms_origem=?,icms_cst=?,icms_aliquota=?,ipi_cst=?,ipi_aliquota=?,
         pis_cst=?,pis_aliquota=?,cofins_cst=?,cofins_aliquota=?,unidade=?,preco=?,ativo=?
         WHERE id=?''',
-        (form.get('nome'), form.get('prazo_producao'), form.get('selo_destaque','Nenhum'),
+        (form.get('nome'), imagem, form.get('prazo_producao'), form.get('selo_destaque','Nenhum'),
          form.get('sku'), form.get('mpn'), form.get('gtin_ean'),
          form.get('como_despachado','Todos'), form.get('quem_pode_comprar','Todos'),
          1 if form.get('visivel_painel') else 0, 1 if form.get('visivel_loja') else 0,
@@ -671,14 +692,14 @@ def get_pedidos(status=None, busca=None):
 
 def get_pedido(id):
     conn = get_db()
-    pedido = conn.execute('''SELECT p.*, c.nome as cliente_nome FROM pedidos p
+    pedido = conn.execute('''SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone FROM pedidos p
                              LEFT JOIN clientes c ON p.cliente_id = c.id
                              WHERE p.id = ?''', (id,)).fetchone()
     if not pedido:
         conn.close()
         return None
     pedido = dict(pedido)
-    itens = conn.execute('''SELECT pi.*, pr.nome as produto_nome FROM pedido_itens pi
+    itens = conn.execute('''SELECT pi.*, pr.nome as produto_nome, pr.imagem as produto_imagem FROM pedido_itens pi
                             LEFT JOIN produtos pr ON pi.produto_id = pr.id
                             WHERE pi.pedido_id = ?''', (id,)).fetchall()
     pedido['itens'] = [dict(i) for i in itens]
@@ -1572,7 +1593,7 @@ def get_orcamento(id):
         conn.close()
         return None
     orc = dict(orc)
-    itens = conn.execute('''SELECT oi.*, p.nome as produto_nome FROM orcamento_itens oi
+    itens = conn.execute('''SELECT oi.*, p.nome as produto_nome, p.imagem as produto_imagem FROM orcamento_itens oi
                             LEFT JOIN produtos p ON oi.produto_id = p.id
                             WHERE oi.orcamento_id = ?''', (id,)).fetchall()
     orc['itens'] = [dict(i) for i in itens]
@@ -1652,13 +1673,13 @@ def excluir_orcamento(id):
 
 def get_produto_precos(id):
     conn = get_db()
-    produto = conn.execute("SELECT id,nome,preco,unidade,prazo_producao FROM produtos WHERE id=?", (id,)).fetchone()
+    produto = conn.execute("SELECT id,nome,preco,unidade,prazo_producao,tipo_preco FROM produtos WHERE id=?", (id,)).fetchone()
     if not produto:
         conn.close()
         return None
     p = dict(produto)
     p['precos'] = [dict(r) for r in conn.execute(
-        "SELECT * FROM produto_precos WHERE produto_id=? ORDER BY quantidade", (id,)).fetchall()]
+        "SELECT * FROM produto_precos WHERE produto_id=? ORDER BY COALESCE(qtd_min, quantidade)", (id,)).fetchall()]
     p['variacoes'] = [dict(r) for r in conn.execute(
         "SELECT * FROM produto_variacoes WHERE produto_id=? ORDER BY id", (id,)).fetchall()]
     conn.close()
@@ -1752,6 +1773,36 @@ def nfe_get_todos_insumos():
     return {'papel': papeis, 'acabamento': acabamentos, 'papelao': papelao, 'midia': midias}
 
 
+def _nfe_norm(s):
+    """Normaliza nome para comparação: maiúsculo, sem acento, espaços colapsados."""
+    import re, unicodedata
+    s = (s or '').upper().strip()
+    s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+    return re.sub(r'\s+', ' ', s)
+
+
+def nfe_match_por_nome(descricao):
+    """Procura um insumo já cadastrado cujo nome bata com a descrição da NF-e.
+    Casa por nome exato (normalizado) ou nome do insumo contido na descrição.
+    Retorna {insumo_tipo, insumo_id, nome} do melhor match, ou None."""
+    alvo = _nfe_norm(descricao)
+    if not alvo:
+        return None
+    melhor = None
+    for tipo, lista in nfe_get_todos_insumos().items():
+        for ins in lista:
+            nome_norm = _nfe_norm(ins['nome'])
+            if len(nome_norm) < 4:
+                continue
+            if nome_norm == alvo or nome_norm in alvo:
+                tamanho = len(nome_norm)
+                if melhor is None or tamanho > melhor['_len']:
+                    melhor = {'insumo_tipo': tipo, 'insumo_id': ins['id'], 'nome': ins['nome'], '_len': tamanho}
+    if melhor:
+        melhor.pop('_len', None)
+    return melhor
+
+
 _CUSTO_FIELDS = {
     'papel':      ('prec_papeis',        'custo_resma'),
     'acabamento': ('prec_acabamentos',   'custo_base'),
@@ -1760,11 +1811,36 @@ _CUSTO_FIELDS = {
 }
 
 
+def _nfe_parse_papel_nome(nome):
+    """Extrai medida (mm -> cm) e folhas/pacote do nome do papel e devolve o nome LIMPO.
+    Ex.: 'DUPLEX 250 GRS BATTAGLIA 660 X 960 MM C/ 150.0 FL' -> ('DUPLEX 250 GRS BATTAGLIA', 66.0, 96.0, 150)"""
+    import re
+    larg = alt = 0.0
+    folhas = 0
+    limpo = nome or ''
+    m = re.search(r'(\d+(?:[.,]\d+)?)\s*[xX]\s*(\d+(?:[.,]\d+)?)\s*MM', limpo, re.IGNORECASE)
+    if m:
+        larg = round(float(m.group(1).replace(',', '.')) / 10.0, 1)
+        alt  = round(float(m.group(2).replace(',', '.')) / 10.0, 1)
+        limpo = limpo[:m.start()] + ' ' + limpo[m.end():]
+    # extrai e remove o pacote "C/ 150.0 FL"
+    mf = re.search(r'\bC/\s*(\d+(?:[.,]\d+)?)\s*FL\b', limpo, re.IGNORECASE)
+    if mf:
+        folhas = int(float(mf.group(1).replace(',', '.')))
+    limpo = re.sub(r'\bC/\s*\d+(?:[.,]\d+)?\s*FL\b', '', limpo, flags=re.IGNORECASE)
+    limpo = re.sub(r'\s+', ' ', limpo).strip(' -–—·,')
+    return limpo, larg, alt, folhas
+
+
 def nfe_criar_insumo(tipo, nome, custo):
     conn = get_db()
     c = conn.cursor()
     if tipo == 'papel':
-        c.execute("INSERT INTO prec_papeis (nome, largura, altura, folhas_resma, custo_resma) VALUES (?,0,0,500,?)", (nome, custo))
+        nome_limpo, larg, alt, folhas = _nfe_parse_papel_nome(nome)
+        folhas = folhas or 500
+        # custo recebido é por FOLHA (NF-e em FL); custo da resma = por folha × folhas do pacote
+        c.execute("INSERT INTO prec_papeis (nome, largura, altura, folhas_resma, custo_resma) VALUES (?,?,?,?,?)",
+                  (nome_limpo or nome, larg, alt, folhas, custo * folhas))
     elif tipo == 'acabamento':
         c.execute("INSERT INTO prec_acabamentos (nome, tipo, custo_base, unidade) VALUES (?,?,?,?)", (nome, 'job', custo, 'job'))
     elif tipo == 'papelao':
@@ -1799,7 +1875,12 @@ def nfe_importar(header, itens_mapeados):
             (header['cnpj'], item['codigo'], tipo, iid)
         )
         # update insumo cost
-        if tipo in _CUSTO_FIELDS:
+        if tipo == 'papel':
+            # NF-e vem em FL (valor por folha); custo_resma = valor/folha × folhas da resma cadastrada
+            fr = c.execute("SELECT folhas_resma FROM prec_papeis WHERE id=?", (iid,)).fetchone()
+            folhas = (fr[0] if fr and fr[0] else 1)
+            c.execute("UPDATE prec_papeis SET custo_resma=? WHERE id=?", (item['valor_unit'] * folhas, iid))
+        elif tipo in _CUSTO_FIELDS:
             table, field = _CUSTO_FIELDS[tipo]
             c.execute(f"UPDATE {table} SET {field}=? WHERE id=?", (item['valor_unit'], iid))
         # update stock (upsert: add qty)

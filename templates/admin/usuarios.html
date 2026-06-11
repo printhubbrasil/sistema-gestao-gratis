@@ -57,7 +57,7 @@
 <script>
 function toggleUsuario(id, ativo) {
   if (!confirm(ativo ? 'Ativar este usuário?' : 'Desativar este usuário?')) return;
-  fetch('/admin/usuarios/' + id + '/toggle', {
+  fetch('{{ url_for("admin_usuarios") }}/' + id + '/toggle', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ativo: ativo})
